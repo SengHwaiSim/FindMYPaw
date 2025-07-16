@@ -3,7 +3,7 @@ import type { MetadataRoute } from 'next'
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'FindMYPaw',
-    short_name: 'FMYP',
+    short_name: 'FindMYPaw',
     description: 'rescue all the pet',
     start_url: '/',
     display: 'standalone',
