@@ -3,6 +3,9 @@ import PWAInstallPrompt  from '@/components/custom/PWA-install-prompt'
 import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import BottomNavigation from '@/components/custom/BottomNavigation'
+import HeaderPages from '@/components/custom/TopHeader'
+import TopHeader from '@/components/custom/TopHeader'
 
 export default function Home() {
   const lostCount = 0 // replace with real data or state
@@ -11,10 +14,7 @@ export default function Home() {
   return (
     <div className="flex flex-col h-screen bg-white ">
       {/* Header */}
-      <header className="flex items-center justify-center p-4 border-b">
-        <Image src="/apple-icon.png" alt="Paw Icon" width={30} height={30} className="mr-2" />
-        <h1 className="text-gray-700 text-lg font-bold">FindMYPaw</h1>
-      </header>
+      <TopHeader/>
 
       {/* Statistics Dashboard */}
       <main className="flex-1 flex items-center justify-around px-4 py-8">
@@ -30,11 +30,7 @@ export default function Home() {
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="flex justify-around border-t py-4">
-        <Link href="/" className="text-base text-blue-500 font-semibold">Home</Link>
-        <Link href="/rescue" className="text-base text-gray-700 hover:text-blue-500">Rescue</Link>
-        <Link href="/account" className="text-base text-gray-700 hover:text-blue-500">Account</Link>
-      </nav>
+      <BottomNavigation/>
     </div>
   )
 }
