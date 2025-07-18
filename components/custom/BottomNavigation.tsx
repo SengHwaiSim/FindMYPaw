@@ -15,7 +15,7 @@ export default function BottomNavigation() {
       <Link
         href="/"
         className={`text-base  ${
-          isActive('/') ? 'text-blue-500 font-semibold ' : 'text-gray-700 hover:text-blue-500 font-medium'
+          isActive('/') ? 'text-orange-500 font-semibold ' : 'text-gray-700 hover:text-blue-500 font-medium'
         }`}
       >
         Home
@@ -23,7 +23,7 @@ export default function BottomNavigation() {
       <Link
         href="/rescue"
         className={`text-base  ${
-          isActive('/rescue') ? 'text-blue-500 font-semibold ' : 'text-gray-700 hover:text-blue-500 font-medium'
+          isActive('/rescue') ? 'text-orange-500 font-semibold ' : 'text-gray-700 hover:text-blue-500 font-medium'
         }`}
       >
         Rescue
@@ -31,7 +31,7 @@ export default function BottomNavigation() {
       <Link
         href="/account"
         className={`text-base  ${
-          isActive('/account') ? 'text-blue-500 font-semibold ' : 'text-gray-700 hover:text-blue-500 font-medium'
+          isActive('/account') ? 'text-orange-500 font-semibold ' : 'text-gray-700 hover:text-blue-500 font-medium'
         }`}
       >
         Account
