@@ -32,7 +32,7 @@ export default function Home() {
         </div>
 
         {/* Lost & Found Slider */}
-        <div className="relative w-full h-10 rounded-full bg-orange-200 shadow-md">
+        <div className="relative w-full h-8 rounded-full bg-orange-200 shadow-md">
           <div
             className="absolute w-1/2 h-full rounded-full bg-orange-300 transition-all duration-300 shadow-inner"
             style={{ transform: `translateX(${lostSelected ? '0%' : '100%'})` }}
