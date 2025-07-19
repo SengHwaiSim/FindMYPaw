@@ -1,9 +1,12 @@
-import React from 'react'
+"use client";
+
+import React, { useState } from 'react'
 import PWAInstallPrompt from '@/components/custom/PWA-install-prompt'
 import TopHeader from '@/components/custom/TopHeader'
 import BottomNavigation from '@/components/custom/BottomNavigation'
 
 export default function Home() {
+  const [lostSelected, setLostSelected] = useState(true)
   const lostCount = 0 // replace with real data or state
   const foundCount = 0 // replace with real data or state
 
@@ -28,12 +31,26 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Lost & Found Buttons */}
-        <div className="flex gap-2">
-          <button className="bg-orange-300 text-gray-700 px-6 py-2 rounded-full font-medium shadow">
+        {/* Lost & Found Slider */}
+        <div className="relative w-full h-10 rounded-full bg-orange-200 shadow-md">
+          <div
+            className="absolute w-1/2 h-full rounded-full bg-orange-300 transition-all duration-300 shadow-inner"
+            style={{ transform: `translateX(${lostSelected ? '0%' : '100%'})` }}
+          />
+          <button
+            className={`absolute w-1/2 h-full rounded-full font-medium transition-colors duration-300 ${
+              lostSelected ? 'text-black font-bold' : 'text-gray-700'
+            }`}
+            onClick={() => setLostSelected(true)}
+          >
             Lost
           </button>
-          <button className="bg-orange-200 text-black px-6 py-2 rounded-full font-medium shadow">
+          <button
+            className={`absolute w-1/2 h-full right-0 rounded-full font-medium transition-colors duration-300 ${
+              lostSelected ? 'text-gray-700' : 'text-black font-bold'
+            }`}
+            onClick={() => setLostSelected(false)}
+          >
             Found
           </button>
         </div>
