@@ -13,9 +13,9 @@ export default function BottomNavigation() {
   return (
     <nav className="flex justify-around border-t py-6 mb-6">
       <Link
-        href="/"
+        href="/home"
         className={`text-base  ${
-          isActive('/') ? 'text-orange-500 font-semibold ' : 'text-gray-700 hover:text-blue-500 font-medium'
+          isActive('/home') ? 'text-orange-500 font-semibold ' : 'text-gray-700 hover:text-blue-500 font-medium'
         }`}
       >
         Home

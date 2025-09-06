@@ -1,67 +1,88 @@
 "use client";
 
-import React, { useState } from 'react'
-import PWAInstallPrompt from '@/components/custom/PWA-install-prompt'
-import TopHeader from '@/components/custom/TopHeader'
-import BottomNavigation from '@/components/custom/BottomNavigation'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-export default function Home() {
-  const [lostSelected, setLostSelected] = useState(true)
-  const lostCount = 0 // replace with real data or state
-  const foundCount = 0 // replace with real data or state
+export default function Page() {
+  const supabase = createClientComponentClient();
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [isLogin, setIsLogin] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (isLogin) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setError(error.message);
+      else router.push("/home");
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { username } },
+      });
+      if (error) setError(error.message);
+      else router.push("/home");
+    }
+  };
 
   return (
-    <div className="flex flex-col h-screen bg-white">
-      <TopHeader />
+    <main className="flex min-h-screen items-center justify-center bg-gray-100 text-gray-700 p-5 pb-30">
+      <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 ">
+        <h1 className="text-2xl font-bold text-center mb-4 ">
+          {isLogin ? "Login" : "Register"}
+        </h1 >
+        {error && <p className="text-red-500 text-sm">{error}</p>}
 
-      <main className="flex-1 flex flex-col items-center gap-2 p-4">
-        <PWAInstallPrompt />
-
-        {/* Orange Stat Boxes */}
-        <div className="w-full flex justify-center bg-orange-300 text-sm p-4 rounded-md gap-15">
-          <div className="text-sm text-gray-700">
-            <p>Location</p>
-            <p>Rescued: --</p>
-            <p>Missing: --</p>
-          </div>
-          <div className="text-sm text-gray-700">
-            <p>Overall Missing: --</p>
-            <p>Dogs: --</p>
-            <p>Cats: --</p>
-          </div>
-        </div>
-
-        {/* Lost & Found Slider */}
-        <div className="relative w-full h-8 rounded-full bg-orange-200 shadow-md">
-          <div
-            className="absolute w-1/2 h-full rounded-full bg-orange-300 transition-all duration-300 shadow-inner"
-            style={{ transform: `translateX(${lostSelected ? '0%' : '100%'})` }}
+        <form onSubmit={handleSubmit} className="flex flex-col space-y-4 ">
+          {!isLogin && (
+            <input
+              type="text"
+              placeholder="Username"
+              className="border p-2 rounded"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          )}
+          <input
+            type="email"
+            placeholder="Email"
+            className="border p-2 rounded"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
           />
-          <button
-            className={`absolute w-1/2 h-full rounded-full font-medium transition-colors duration-300 ${
-              lostSelected ? 'text-black font-bold' : 'text-gray-700'
-            }`}
-            onClick={() => setLostSelected(true)}
-          >
-            Lost
+          <input
+            type="password"
+            placeholder="Password"
+            className="border p-2 rounded"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <button className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
+            {isLogin ? "Login" : "Register"}
           </button>
+        </form>
+
+        <p className="text-sm text-center mt-4">
+          {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
           <button
-            className={`absolute w-1/2 h-full right-0 rounded-full font-medium transition-colors duration-300 ${
-              lostSelected ? 'text-gray-700' : 'text-black font-bold'
-            }`}
-            onClick={() => setLostSelected(false)}
+            onClick={() => setIsLogin(!isLogin)}
+            className="text-blue-600 underline"
           >
-            Found
+            {isLogin ? "Register" : "Login"}
           </button>
-        </div>
-
-        {/* Lost Detail Card */}
-        <div className="bg-green-100 text-center text-black p-6 w-full rounded-xl shadow-md">
-          <p className="text-base">Detail about lost dogs</p>
-        </div>
-      </main>
-
-      <BottomNavigation />
-    </div>
-  )
+        </p>
+      </div>
+    </main>
+  );
 }
