@@ -3,7 +3,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Session, User } from "@supabase/supabase-js";
+import { User } from "@supabase/supabase-js";
 import TopHeader from "@/components/custom/TopHeader";
 import BottomNavigation from "@/components/custom/BottomNavigation";
 
@@ -12,12 +12,18 @@ export default function Rescue() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [openPanel, setOpenPanel] = useState(false);
+
+  // form fields
+  const [dateMissing, setDateMissing] = useState("");
+  const [location, setLocation] = useState("");
+  const [breed, setBreed] = useState("");
+  const [type, setType] = useState("");
+  const [color, setColor] = useState("");
+  const [remark, setRemark] = useState("");
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -26,63 +32,53 @@ export default function Rescue() {
     });
   }, []);
 
-  useEffect(() => {
-    if (stream && videoRef.current) videoRef.current.srcObject = stream;
-  }, [stream]);
-
-  const handleScan = async () => {
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-      setStream(null);
+  const handleSubmit = async () => {
+    if (!file) return alert("Please upload a picture");
+    if (!dateMissing || !location || !type) {
+      return alert("Please fill in all required fields (date, location, type)");
     }
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter((d) => d.kind === "videoinput");
-      let selectedDeviceId = videoDevices[0]?.deviceId;
-      const mode = facingMode === "user" ? "front" : "back";
-      const device = videoDevices.find((d) =>
-        d.label.toLowerCase().includes(mode)
-      );
-      if (device) selectedDeviceId = device.deviceId;
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: selectedDeviceId! } },
-      });
-      setStream(newStream);
-    } catch (err) {
-      console.error("Camera error:", err);
-      alert("Could not access camera.");
-    }
-  };
 
-  const handleStop = () => {
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-      setStream(null);
-      if (videoRef.current) videoRef.current.srcObject = null;
-    }
-  };
-
-  const handleFlip = async () => {
-    setFacingMode(facingMode === "user" ? "environment" : "user");
-    await handleScan();
-  };
-
-  const handleUpload = async () => {
-    if (!file) return alert("Pick a file first");
     setUploading(true);
     const fileName = `${Date.now()}-${file.name}`;
+
     try {
-      const { error } = await supabase.storage
+      // Upload image to Supabase Storage
+      const { error: uploadError } = await supabase.storage
         .from("animal-images")
         .upload(fileName, file);
-      if (error) throw error;
-      const { data } = supabase.storage.from("animal-images").getPublicUrl(fileName);
-      await supabase.from("rescued_animals").insert({ image_url: data.publicUrl });
-      alert("Upload successful!");
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from("animal-images")
+        .getPublicUrl(fileName);
+
+      // Insert record into database
+      const { error: dbError } = await supabase.from("missing_animals").insert({
+        user_id: user?.id,
+        image_url: data.publicUrl,
+        date_missing: dateMissing,
+        location,
+        breed,
+        type,
+        color,
+        remark,
+      });
+
+      if (dbError) throw dbError;
+
+      alert("Report submitted successfully!");
       setFile(null);
+      setDateMissing("");
+      setLocation("");
+      setBreed("");
+      setType("");
+      setColor("");
+      setRemark("");
+      setOpenPanel(false);
     } catch (err) {
       console.error(err);
-      alert("Upload failed");
+      alert("Failed to submit report");
     } finally {
       setUploading(false);
     }
@@ -91,38 +87,101 @@ export default function Rescue() {
   return (
     <div className="flex flex-col h-screen bg-white">
       <TopHeader />
-      <main className="flex-1 flex flex-col items-center justify-center px-4 gap-4">
-        {stream ? (
-          <>
-            <video ref={videoRef} autoPlay playsInline className="w-96 h-72 rounded-lg" />
-            <div className="flex gap-4">
-              <button onClick={handleStop} className="px-6 py-3 bg-red-500 text-white rounded">Stop</button>
-              <button onClick={handleFlip} className="px-6 py-3 bg-green-500 text-white rounded">Flip</button>
-            </div>
-          </>
-        ) : (
-          <button onClick={handleScan} className="px-6 py-3 bg-blue-500 text-white rounded">Scan Now</button>
-        )}
 
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-        />
-        <button onClick={() => inputRef.current?.click()} className="px-6 py-2 bg-blue-500 text-white rounded">
-          Choose Picture
-        </button>
+      <main className="flex-1 flex flex-col items-center justify-center px-4 gap-4">
         <button
-          onClick={handleUpload}
-          disabled={!file || uploading}
-          className="px-6 py-2 bg-purple-600 text-white rounded disabled:opacity-50"
+          onClick={() => setOpenPanel(true)}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow"
         >
-          {uploading ? "Uploading..." : "Upload Picture"}
+          Report Missing
         </button>
-        {file && <p className="text-sm">{file.name}</p>}
       </main>
+
+      {/* Slide-up Modal */}
+      {openPanel && (
+        <div className="fixed inset-0 flex items-end justify-center bg-black text-gray-700 z-50" style={{backgroundColor: 'rgba(0,0,0,0.4)'}}>
+          <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up">
+            <h2 className="text-lg font-bold mb-4 text-center">
+              Report Missing Animal
+            </h2>
+
+            {/* File upload */}
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              className="mb-2"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+            />
+            {file && <p className="text-sm text-gray-600">File: {file.name}</p>}
+
+            {/* Required Fields */}
+            <input
+              type="date"
+              value={dateMissing}
+              onChange={(e) => setDateMissing(e.target.value)}
+              className="w-full mb-2 border p-2 rounded"
+              required
+            />
+            <input
+              type="text"
+              placeholder="Location *"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="w-full mb-2 border p-2 rounded"
+              required
+            />
+            <input
+              type="text"
+              placeholder="Type (Dog, Cat, etc.) *"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-full mb-2 border p-2 rounded"
+              required
+            />
+
+            {/* Optional Fields */}
+            <input
+              type="text"
+              placeholder="Breed"
+              value={breed}
+              onChange={(e) => setBreed(e.target.value)}
+              className="w-full mb-2 border p-2 rounded"
+            />
+            <input
+              type="text"
+              placeholder="Color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="w-full mb-2 border p-2 rounded"
+            />
+            <textarea
+              placeholder="Remark"
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              className="w-full mb-2 border p-2 rounded"
+            />
+
+            {/* Buttons */}
+            <div className="flex justify-between mt-4">
+              <button
+                onClick={() => setOpenPanel(false)}
+                className="px-4 py-2 bg-gray-400 text-white rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={uploading}
+                className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+              >
+                {uploading ? "Submitting..." : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <BottomNavigation />
     </div>
   );
