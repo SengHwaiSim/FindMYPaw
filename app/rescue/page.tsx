@@ -278,7 +278,7 @@ const [confirmReport, setConfirmReport] = useState<AnimalReport | null>(null);
               <option value="">Select Gender</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
-              <option value="Don't know">Don't know</option>
+              <option value="Don't know">Don`&apos;`t know</option>
             </select>
 
             {/* Age */}
