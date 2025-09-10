@@ -33,6 +33,8 @@ export default function Rescue() {
   const [uploading, setUploading] = useState(false);
   const [openPanel, setOpenPanel] = useState<"missing" | "found" | null>(null);
 
+
+
   // form fields
   const [date, setDate] = useState("");
   const [location, setLocation] = useState("");
@@ -43,8 +45,6 @@ export default function Rescue() {
   const [gender, setGender] = useState("");
   const [age, setAge] = useState("");
 
-  const [allReports, setAllReports] = useState<AnimalReport[]>([]);
-  const [filter, setFilter] = useState<"all" | "missing" | "found">("all"); // 👈 NEW
 
   const malaysiaStates = [
     "Johor", "Kedah", "Kelantan", "Melaka", "Negeri Sembilan",
@@ -70,8 +70,48 @@ const getDaysAgo = (dateStr?: string) => {
   return `${diffDays} days ago`;
 };
 
-// new state
-const [confirmReport, setConfirmReport] = useState<AnimalReport | null>(null);
+  // new state
+  const [confirmReport, setConfirmReport] = useState<AnimalReport | null>(null);
+  const [allReports, setAllReports] = useState<AnimalReport[]>([]);
+  const [filter, setFilter] = useState<"all" | "missing" | "found">("all"); // 👈 NEW
+  const [step, setStep] = useState<1 | 2 | 3>(1); 
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const handleManual = () => setStep(3);
+  const [detecting, setDetecting] = useState(false);
+
+  const handleAIDetect = async () => {
+    if (!file) return alert("Please upload a picture first");
+
+    setDetecting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // call Next.js API route
+      const res = await fetch("/api/predict", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("AI detection failed");
+
+      const data = await res.json();
+      console.log("AI result:", data);
+
+      if (data.detections && data.detections.length > 0) {
+        const best = data.detections[0];
+        setType(best.type);     // auto fill type
+        setBreed(best.breed);   // auto fill breed
+      } else {
+        alert("No animal detected. Please enter manually.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error while detecting animal.");
+    } finally {
+      setDetecting(false);
+    }
+  };
 
 
   useEffect(() => {
@@ -241,69 +281,219 @@ const [confirmReport, setConfirmReport] = useState<AnimalReport | null>(null);
         </div>
       </main>
 
-      {/* Slide-up Modal (same as before) */}
-      {openPanel && (
-        <div className="fixed inset-0 flex items-end justify-center bg-black text-gray-700 z-50" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
-          <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up">
-            <h2 className="text-lg font-bold mb-4 text-center">
-              {openPanel === "missing" ? "Report Missing Animal" : "Report Found Animal"}
-            </h2>
+{openPanel && (
+  <div className="fixed inset-0 flex items-end justify-center bg-black text-gray-700 z-50"
+       style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+    <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up">
+      <h2 className="text-lg font-bold mb-4 text-center">
+        {openPanel === "missing" ? "Report Missing Animal" : "Report Found Animal"}
+      </h2>
 
-            {/* File upload */}
-            <input ref={inputRef} type="file" accept="image/*" className="mb-2" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            {file && <p className="text-sm text-gray-600">File: {file.name}</p>}
+      {/* Step 1: Upload + AI/Manual choice */}
+      {step === 1 && (
+        <div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="mb-2"
+            onChange={(e) => {
+              const f = e.target.files?.[0] || null;
+              setFile(f);
+              if (f) setPreviewUrl(URL.createObjectURL(f));
+            }}
+          />
 
-            {/* Date */}
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full mb-2 border p-2 rounded" required />
+          {previewUrl && (
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="w-full h-48 object-cover rounded mb-3"
+            />
+          )}
 
-            {/* Location */}
-            <select value={location} onChange={(e) => setLocation(e.target.value)} className="w-full mb-2 border p-2 rounded" required>
-              <option value="">
-                {openPanel === "missing" ? "Select Missing Location *" : "Select Found Location *"}
+          {/* Info note */}
+          <p className="text-xs text-gray-600 mb-3">
+            If you do not know which breed is the pet you can do this. <br />
+            <span className="font-semibold">AI Detect</span> might take a few seconds or longer, 
+            and it is not always correct.
+          </p>
+
+          <div className="flex gap-4 mt-4">
+            <button
+              onClick={() => setStep(3)}
+              disabled={!file || detecting}
+              className="flex-1 px-4 py-2 bg-gray-400 text-white rounded disabled:opacity-50"
+            >
+              Manual
+            </button>
+
+            <button
+              onClick={async () => {
+                if (!file) return;
+                setDetecting(true); // start loading
+                const formData = new FormData();
+                formData.append("file", file);
+
+                try {
+                  const res = await fetch("/api/predict", {
+                    method: "POST",
+                    body: formData,
+                  });
+                  const result = await res.json();
+
+                  if (result.detections?.length > 0) {
+                    const best = result.detections[0];
+                    setType(best.type || "");
+                    setBreed(best.breed || "");
+                  } else {
+                    alert("No animal detected, please fill manually.");
+                  }
+
+                  setStep(3);
+                } catch (err) {
+                  console.error(err);
+                  alert("AI detection failed, please try manual.");
+                  setStep(3);
+                } finally {
+                  setDetecting(false); // stop loading
+                }
+              }}
+              disabled={!file || detecting}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+            >
+              {detecting ? "Detecting..." : "AI Detect"}
+            </button>
+          </div>
+
+          {/* Show extra loader message if detecting */}
+          {detecting && (
+            <p className="mt-3 text-sm text-blue-600 text-center">
+              AI is analyzing the photo, please wait...
+            </p>
+          )}
+        </div>
+      )}
+
+
+      {/* Step 3: Fill in details */}
+      {step === 3 && (
+        <div>
+          {previewUrl && (
+            <img src={previewUrl} alt="Preview" className="w-full h-48 object-cover rounded mb-3" />
+          )}
+
+          {/* Type + Breed */}
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+            required
+          >
+            <option value="">Select Type *</option>
+            <option value="Dog">Dog</option>
+            <option value="Cat">Cat</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Breed"
+            value={breed}
+            onChange={(e) => setBreed(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+          />
+
+          {/* Date */}
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+            required
+          />
+
+          {/* Location */}
+          <select
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+            required
+          >
+            <option value="">
+              {openPanel === "missing" ? "Select Missing Location *" : "Select Found Location *"}
+            </option>
+            {malaysiaStates.map((state) => (
+              <option key={state} value={state}>
+                {state}
               </option>
-              {malaysiaStates.map((state) => (
-                <option key={state} value={state}>{state}</option>
-              ))}
-            </select>
+            ))}
+          </select>
 
-            {/* Type */}
-            <select value={type} onChange={(e) => setType(e.target.value)} className="w-full mb-2 border p-2 rounded" required>
-              <option value="">Select Type *</option>
-              <option value="Dog">Dog</option>
-              <option value="Cat">Cat</option>
-            </select>
+          {/* Gender */}
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+          >
+            <option value="">Select Gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Don't know">Don`&apos;`t know</option>
+          </select>
 
-            {/* Gender */}
-            <select value={gender} onChange={(e) => setGender(e.target.value)} className="w-full mb-2 border p-2 rounded">
-              <option value="">Select Gender</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Don't know">Don`&apos;`t know</option>
-            </select>
+          {/* Age */}
+          <select
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+          >
+            <option value="">Select Age</option>
+            {ageOptions.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
 
-            {/* Age */}
-            <select value={age} onChange={(e) => setAge(e.target.value)} className="w-full mb-2 border p-2 rounded">
-              <option value="">Select Age</option>
-              {ageOptions.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
+          {/* Optional */}
+          <input
+            type="text"
+            placeholder="Color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+          />
+          <textarea
+            placeholder={openPanel === "missing" ? "Remark" : "Condition / Remark"}
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+          />
 
-            {/* Optional */}
-            <input type="text" placeholder="Breed" value={breed} onChange={(e) => setBreed(e.target.value)} className="w-full mb-2 border p-2 rounded" />
-            <input type="text" placeholder="Color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full mb-2 border p-2 rounded" />
-            <textarea placeholder={openPanel === "missing" ? "Remark" : "Condition / Remark"} value={remark} onChange={(e) => setRemark(e.target.value)} className="w-full mb-2 border p-2 rounded" />
-
-            {/* Buttons */}
-            <div className="flex justify-between mt-4">
-              <button onClick={() => setOpenPanel(null)} className="px-4 py-2 bg-red-500 text-white rounded">Cancel</button>
-              <button onClick={handleSubmit} disabled={uploading} className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50">
-                {uploading ? "Submitting..." : "Submit"}
-              </button>
-            </div>
+          {/* Buttons */}
+          <div className="flex justify-between mt-4">
+            <button
+              onClick={() => {
+                setOpenPanel(null);
+                setStep(1);
+              }}
+              className="px-4 py-2 bg-red-500 text-white rounded"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={uploading}
+              className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+            >
+              {uploading ? "Submitting..." : "Submit"}
+            </button>
           </div>
         </div>
       )}
+    </div>
+  </div>
+)}
+
 
       {confirmReport && (
       <div className="fixed inset-0 flex items-end justify-center bg-black z-50" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>

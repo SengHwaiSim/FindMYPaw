@@ -295,7 +295,7 @@ export default function Account() {
       )}
 
       {activeTab === "found" && (
-        <div className="w-full max-w-md mx-auto bg-green-300 rounded-lg shadow p-4">
+        <div className=" w-full max-w-md mx-auto bg-green-300 rounded-lg shadow p-4">
           <h2 className="text-lg font-bold mb-4 text-center">My Found Reports</h2>
           {foundReports.length === 0 ? (
             <p className="text-gray-600 text-center">No found reports yet.</p>
