@@ -6,6 +6,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { User } from "@supabase/supabase-js";
 import TopHeader from "@/components/custom/TopHeader";
 import BottomNavigation from "@/components/custom/BottomNavigation";
+import imageCompression from "browser-image-compression";
 
 interface AnimalReport {
   id: string;
@@ -33,8 +34,6 @@ export default function Rescue() {
   const [uploading, setUploading] = useState(false);
   const [openPanel, setOpenPanel] = useState<"missing" | "found" | null>(null);
 
-
-
   // form fields
   const [date, setDate] = useState("");
   const [location, setLocation] = useState("");
@@ -45,106 +44,106 @@ export default function Rescue() {
   const [gender, setGender] = useState("");
   const [age, setAge] = useState("");
 
-
   const malaysiaStates = [
-    "Johor", "Kedah", "Kelantan", "Melaka", "Negeri Sembilan",
-    "Pahang", "Perak", "Perlis", "Pulau Pinang", "Sabah",
-    "Sarawak", "Selangor", "Terengganu",
-    "WP Kuala Lumpur", "WP Labuan", "WP Putrajaya",
+    "Johor","Kedah","Kelantan","Melaka","Negeri Sembilan",
+    "Pahang","Perak","Perlis","Pulau Pinang","Sabah",
+    "Sarawak","Selangor","Terengganu",
+    "WP Kuala Lumpur","WP Labuan","WP Putrajaya",
   ];
 
   const ageOptions = [
-    "1–3 months", "4–6 months", "7–9 months", "10–12 months",
+    "1–3 months","4–6 months","7–9 months","10–12 months",
     ...Array.from({ length: 40 }, (_, i) => `${i + 1} year old`),
     "Don't know",
   ];
 
-  // helper
-const getDaysAgo = (dateStr?: string) => {
-  if (!dateStr) return "Unknown";
-  const today = new Date();
-  const d = new Date(dateStr);
-  const diffDays = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays <= 0) return "<1 day ago";
-  if (diffDays === 1) return "1 day ago";
-  return `${diffDays} days ago`;
-};
+  // helpers
+  const getDaysAgo = (dateStr?: string) => {
+    if (!dateStr) return "Unknown";
+    const today = new Date();
+    const d = new Date(dateStr);
+    const diffDays = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return "<1 day ago";
+    if (diffDays === 1) return "1 day ago";
+    return `${diffDays} days ago`;
+  };
 
-  // new state
+  // state
   const [confirmReport, setConfirmReport] = useState<AnimalReport | null>(null);
   const [allReports, setAllReports] = useState<AnimalReport[]>([]);
-  const [filter, setFilter] = useState<"all" | "missing" | "found">("all"); // 👈 NEW
-  const [step, setStep] = useState<1 | 2 | 3>(1); 
+  const [filter, setFilter] = useState<"all" | "missing" | "found">("all");
+  const [step, setStep] = useState<1 | 3>(1);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const handleManual = () => setStep(3);
   const [detecting, setDetecting] = useState(false);
+
+  // compress image before saving
+  const handleFileChange = async (f: File | null) => {
+    if (!f) return;
+    try {
+      const options = {
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 640,
+        useWebWorker: true,
+      };
+      const compressed = await imageCompression(f, options);
+      setFile(compressed);
+      setPreviewUrl(URL.createObjectURL(compressed));
+    } catch (err) {
+      console.error("Image compression failed:", err);
+      setFile(f);
+      setPreviewUrl(URL.createObjectURL(f));
+    }
+  };
 
   const handleAIDetect = async () => {
     if (!file) return alert("Please upload a picture first");
-
     setDetecting(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-
-      // call Next.js API route
       const res = await fetch("/api/predict", {
         method: "POST",
         body: formData,
       });
-
       if (!res.ok) throw new Error("AI detection failed");
-
       const data = await res.json();
-      console.log("AI result:", data);
 
-      if (data.detections && data.detections.length > 0) {
+      if (data.detections?.length > 0) {
         const best = data.detections[0];
-        setType(best.type);     // auto fill type
-        setBreed(best.breed);   // auto fill breed
+        setType(best.type || "");
+        setBreed(best.breed || "");
       } else {
         alert("No animal detected. Please enter manually.");
       }
+      setStep(3);
     } catch (err) {
       console.error(err);
       alert("Error while detecting animal.");
+      setStep(3);
     } finally {
       setDetecting(false);
     }
   };
-
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) router.push("/");
       else setUser(data.user);
     });
-
     fetchReports();
   }, []);
 
   const fetchReports = async () => {
-    const { data: missingData } = await supabase
-      .from("missing_animals")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    const { data: foundData } = await supabase
-      .from("found_animals")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data: missingData } = await supabase.from("missing_animals").select("*").order("created_at", { ascending: false });
+    const { data: foundData } = await supabase.from("found_animals").select("*").order("created_at", { ascending: false });
 
     const merged: AnimalReport[] = [
       ...(missingData?.map((m) => ({ ...m, source: "missing" })) || []),
       ...(foundData?.map((f) => ({ ...f, source: "found" })) || []),
     ];
-
-    merged.sort(
-      (a, b) =>
-        new Date(b.created_at || "").getTime() -
-        new Date(a.created_at || "").getTime()
+    merged.sort((a, b) =>
+      new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime()
     );
-
     setAllReports(merged);
   };
 
@@ -153,21 +152,15 @@ const getDaysAgo = (dateStr?: string) => {
     if (!date || !location || !type) {
       return alert("Please fill in required fields (date, location, type)");
     }
-
     setUploading(true);
     const ext = file.name.split(".").pop();
     const fileName = `${user?.id}/${Date.now()}.${ext}`;
 
     try {
-      const { error: uploadError } = await supabase.storage
-        .from("animal-images")
-        .upload(fileName, file);
+      const { error: uploadError } = await supabase.storage.from("animal-images").upload(fileName, file);
       if (uploadError) throw uploadError;
 
-      const { data } = supabase.storage
-        .from("animal-images")
-        .getPublicUrl(fileName);
-
+      const { data } = supabase.storage.from("animal-images").getPublicUrl(fileName);
       const table = openPanel === "missing" ? "missing_animals" : "found_animals";
 
       const insertData =
@@ -180,8 +173,7 @@ const getDaysAgo = (dateStr?: string) => {
 
       alert("Report submitted successfully!");
       setFile(null); setDate(""); setLocation(""); setBreed(""); setType("");
-      setColor(""); setGender(""); setAge(""); setRemark(""); setOpenPanel(null);
-
+      setColor(""); setGender(""); setAge(""); setRemark(""); setOpenPanel(null); setStep(1);
       fetchReports();
     } catch (err) {
       console.error(err);
@@ -191,9 +183,9 @@ const getDaysAgo = (dateStr?: string) => {
     }
   };
 
-
   // Filtered reports
   const filteredReports = filter === "all" ? allReports : allReports.filter((r) => r.source === filter);
+
 
   return (
     <div className="flex flex-col h-screen bg-white">
@@ -281,100 +273,46 @@ const getDaysAgo = (dateStr?: string) => {
         </div>
       </main>
 
-{openPanel && (
-  <div className="fixed inset-0 flex items-end justify-center bg-black text-gray-700 z-50"
-       style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
-    <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up">
-      <h2 className="text-lg font-bold mb-4 text-center">
-        {openPanel === "missing" ? "Report Missing Animal" : "Report Found Animal"}
-      </h2>
+      {openPanel && (
+        <div className="fixed inset-0 flex items-end justify-center bg-black text-gray-700 z-50"
+             style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up">
+            <h2 className="text-lg font-bold mb-4 text-center">
+              {openPanel === "missing" ? "Report Missing Animal" : "Report Found Animal"}
+            </h2>
 
-      {/* Step 1: Upload + AI/Manual choice */}
-      {step === 1 && (
-        <div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            className="mb-2"
-            onChange={(e) => {
-              const f = e.target.files?.[0] || null;
-              setFile(f);
-              if (f) setPreviewUrl(URL.createObjectURL(f));
-            }}
-          />
-
-          {previewUrl && (
-            <img
-              src={previewUrl}
-              alt="Preview"
-              className="w-full h-48 object-cover rounded mb-3"
-            />
+          {/* Step 1 */}
+          {step === 1 && (
+            <div>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                className="mb-2"
+                onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+              />
+              {previewUrl && (
+                <img src={previewUrl} alt="Preview" className="w-full h-48 object-cover rounded mb-3" />
+              )}
+              <p className="text-xs text-gray-600 mb-3">
+                If you do not know which breed is the pet you can do this. <br />
+                <span className="font-semibold">AI Detect</span> might take a few seconds or longer, and it is not always correct.
+              </p>
+              <div className="flex gap-4 mt-4">
+                <button onClick={() => setStep(3)} disabled={!file || detecting}
+                  className="flex-1 px-4 py-2 bg-gray-400 text-white rounded disabled:opacity-50">
+                  Manual
+                </button>
+                <button onClick={handleAIDetect} disabled={!file || detecting}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">
+                  {detecting ? "Detecting..." : "AI Detect"}
+                </button>
+              </div>
+              {detecting && (
+                <p className="mt-3 text-sm text-blue-600 text-center">AI is analyzing the photo, please wait...</p>
+              )}
+            </div>
           )}
-
-          {/* Info note */}
-          <p className="text-xs text-gray-600 mb-3">
-            If you do not know which breed is the pet you can do this. <br />
-            <span className="font-semibold">AI Detect</span> might take a few seconds or longer, 
-            and it is not always correct.
-          </p>
-
-          <div className="flex gap-4 mt-4">
-            <button
-              onClick={() => setStep(3)}
-              disabled={!file || detecting}
-              className="flex-1 px-4 py-2 bg-gray-400 text-white rounded disabled:opacity-50"
-            >
-              Manual
-            </button>
-
-            <button
-              onClick={async () => {
-                if (!file) return;
-                setDetecting(true); // start loading
-                const formData = new FormData();
-                formData.append("file", file);
-
-                try {
-                  const res = await fetch("/api/predict", {
-                    method: "POST",
-                    body: formData,
-                  });
-                  const result = await res.json();
-
-                  if (result.detections?.length > 0) {
-                    const best = result.detections[0];
-                    setType(best.type || "");
-                    setBreed(best.breed || "");
-                  } else {
-                    alert("No animal detected, please fill manually.");
-                  }
-
-                  setStep(3);
-                } catch (err) {
-                  console.error(err);
-                  alert("AI detection failed, please try manual.");
-                  setStep(3);
-                } finally {
-                  setDetecting(false); // stop loading
-                }
-              }}
-              disabled={!file || detecting}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
-            >
-              {detecting ? "Detecting..." : "AI Detect"}
-            </button>
-          </div>
-
-          {/* Show extra loader message if detecting */}
-          {detecting && (
-            <p className="mt-3 text-sm text-blue-600 text-center">
-              AI is analyzing the photo, please wait...
-            </p>
-          )}
-        </div>
-      )}
-
 
       {/* Step 3: Fill in details */}
       {step === 3 && (
