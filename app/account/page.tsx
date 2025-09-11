@@ -7,33 +7,53 @@ import { User } from "@supabase/supabase-js";
 import TopHeader from "@/components/custom/TopHeader";
 import BottomNavigation from "@/components/custom/BottomNavigation";
 
-interface MissingAnimal {
+interface ReportBase {
   id: string;
+  user_id: string;
   image_url: string;
-  date_missing: string;
+  type: string;
   location: string;
   breed?: string;
-  type: string;
   color?: string;
   gender?: string;
   age?: string;
   remark?: string;
+  rescued?: boolean;
   created_at?: string;
 }
 
-interface FoundAnimal {
-  id: string;
-  image_url: string;
-  date_found: string;
-  location: string;
-  breed?: string;
-  type: string;
-  color?: string;
-  gender?: string;
-  age?: string;
-  remark?: string;
-  created_at?: string;
+interface MissingAnimal extends ReportBase {
+  date_missing: string;
 }
+
+interface FoundAnimal extends ReportBase {
+  date_found: string;
+}
+
+interface Claim {
+  id: string;
+  report_id: string;
+  claimer_id: string;
+  image_url: string;
+  remark: string;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
+  report_type: "missing" | "found";
+}
+
+interface ClaimData {
+  id: string;
+  claimer_id: string;
+  image_url: string;
+  remark: string;
+  status: string;
+  created_at: string;
+  missing_id: string | null;
+  found_id: string | null;
+  missing_owner: string | null;
+  found_owner: string | null;
+}
+
 
 export default function Account() {
   const supabase = createClientComponentClient();
@@ -42,19 +62,20 @@ export default function Account() {
 
   const [missingReports, setMissingReports] = useState<MissingAnimal[]>([]);
   const [foundReports, setFoundReports] = useState<FoundAnimal[]>([]);
+  const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // modal state
+  const [activeTab, setActiveTab] = useState<
+    "missing" | "found" | "rescued" | "claims"
+  >("missing");
+
+  // Deletion modal state
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [deleteImageUrl, setDeleteImageUrl] = useState<string | null>(null);
   const [deleteType, setDeleteType] = useState<"missing" | "found" | null>(null);
 
-  // accordion state
+  // Accordion state
   const [openMissingId, setOpenMissingId] = useState<string | null>(null);
   const [openFoundId, setOpenFoundId] = useState<string | null>(null);
-
-  // new state
-  const [activeTab, setActiveTab] = useState<"missing" | "found">("missing");
 
   useEffect(() => {
     const loadUser = async () => {
@@ -64,6 +85,7 @@ export default function Account() {
       } else {
         setUser(data.user);
         await fetchReports(data.user.id);
+        await fetchClaims(data.user.id);
       }
       setLoading(false);
     };
@@ -87,6 +109,36 @@ export default function Account() {
     setFoundReports(foundData || []);
   };
 
+const fetchClaims = async (userId: string) => {
+  const { data, error } = await supabase
+    .from("claim_with_reports")
+    .select("*")
+    .or(`missing_owner.eq.${userId},found_owner.eq.${userId}`)
+    .neq("claimer_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Fetch claims error:", error);
+    return;
+  }
+
+  const formatted: Claim[] =
+    data?.map((c: ClaimData) => ({
+      id: c.id,
+      claimer_id: c.claimer_id,
+      image_url: c.image_url,
+      remark: c.remark,
+      status: c.status as "pending" | "accepted" | "rejected",
+      created_at: c.created_at,
+      report_type: c.missing_id ? "missing" : "found",
+      report_id: (c.missing_id || c.found_id)!,
+    })) || [];
+
+  setClaims(formatted);
+};
+
+
+
   const handleDelete = async () => {
     if (!deleteId || !deleteType) return;
     const table = deleteType === "missing" ? "missing_animals" : "found_animals";
@@ -98,13 +150,6 @@ export default function Account() {
         .eq("id", deleteId);
       if (dbError) throw dbError;
 
-      if (deleteImageUrl) {
-        const path = deleteImageUrl.split("/").pop();
-        if (path) {
-          await supabase.storage.from("animal-images").remove([path]);
-        }
-      }
-
       if (deleteType === "missing") {
         setMissingReports((prev) => prev.filter((r) => r.id !== deleteId));
       } else {
@@ -112,11 +157,33 @@ export default function Account() {
       }
 
       setDeleteId(null);
-      setDeleteImageUrl(null);
       setDeleteType(null);
     } catch (err) {
       console.error("Delete failed:", err);
       alert("Failed to delete report.");
+    }
+  };
+
+  const handleClaimDecision = async (
+    claim: Claim,
+    decision: "accepted" | "rejected"
+  ) => {
+    try {
+      await supabase
+        .from("claims")
+        .update({ status: decision })
+        .eq("id", claim.id);
+
+      if (decision === "accepted") {
+        const table =
+          claim.report_type === "missing" ? "missing_animals" : "found_animals";
+        await supabase.from(table).update({ rescued: true }).eq("id", claim.report_id);
+      }
+
+      fetchReports(user!.id);
+      fetchClaims(user!.id);
+    } catch (err) {
+      console.error("Claim decision failed:", err);
     }
   };
 
@@ -146,7 +213,6 @@ export default function Account() {
       key={r.id}
       className="bg-white rounded-lg shadow-sm border border-gray-200"
     >
-      {/* Collapsed header */}
       <button
         onClick={toggle}
         className="w-full flex items-center gap-3 p-3 text-left"
@@ -171,55 +237,28 @@ export default function Account() {
         <span>{isOpen ? "▲" : "▼"}</span>
       </button>
 
-      {/* Expanded details */}
       {isOpen && (
         <div className="px-3 pb-3 text-sm text-gray-700">
           <p>
-            <strong>{type === "missing" ? "Date Missing:" : "Date Found:"}</strong>{" "}
-            {type === "missing"
-              ? (r as MissingAnimal).date_missing
-              : (r as FoundAnimal).date_found}
-          </p>
-          <p>
             <strong>Type:</strong> {r.type}
           </p>
-          {r.breed && (
-            <p>
-              <strong>Breed:</strong> {r.breed}
-            </p>
-          )}
-          {r.color && (
-            <p>
-              <strong>Color:</strong> {r.color}
-            </p>
-          )}
-          {r.gender && (
-            <p>
-              <strong>Gender:</strong> {r.gender}
-            </p>
-          )}
-          {r.age && (
-            <p>
-              <strong>Age:</strong> {r.age}
-            </p>
-          )}
-          {r.remark && (
-            <p>
-              <strong>Remark:</strong> {r.remark}
-            </p>
-          )}
+          {r.breed && <p><strong>Breed:</strong> {r.breed}</p>}
+          {r.color && <p><strong>Color:</strong> {r.color}</p>}
+          {r.gender && <p><strong>Gender:</strong> {r.gender}</p>}
+          {r.age && <p><strong>Age:</strong> {r.age}</p>}
+          {r.remark && <p><strong>Remark:</strong> {r.remark}</p>}
 
-          {/* Delete button */}
-          <button
-            onClick={() => {
-              setDeleteId(r.id);
-              setDeleteImageUrl(r.image_url);
-              setDeleteType(type);
-            }}
-            className="mt-3 w-full px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-          >
-            Remove
-          </button>
+          {!r.rescued && (
+            <button
+              onClick={() => {
+                setDeleteId(r.id);
+                setDeleteType(type);
+              }}
+              className="mt-3 w-full px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            >
+              Remove
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -247,73 +286,135 @@ export default function Account() {
               Log out
             </button>
           </div>
-
         )}
 
         {/* Tabs */}
-        <div className="flex justify-center mb-6 fp">
-          <button
-            onClick={() => setActiveTab("missing")}
-            className={`px-4 py-2 rounded-l-lg  ${
-              activeTab === "missing"
-                ? "bg-orange-300 text-gray-700"
-                : "bg-gray-100 text-gray-600"
-            }`}
-          >
-            Missing Report
-          </button>
-          <button
-            onClick={() => setActiveTab("found")}
-            className={`px-4 py-2 rounded-r-lg ${
-              activeTab === "found"
-                ? "bg-green-300 text-gray-700 "
-                : "bg-gray-100 text-gray-600"
-            }`}
-          >
-           Found Report
-          </button>
+        <div className="flex justify-center mb-6">
+          {["missing", "found", "rescued", "claims"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() =>
+                setActiveTab(tab as "missing" | "found" | "rescued" | "claims")
+              }
+              className={`px-4 py-2 ${
+                activeTab === tab
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-200 text-gray-700"
+              }`}
+            >
+              {tab.toUpperCase()}
+            </button>
+          ))}
         </div>
 
+        {/* Missing Reports */}
         {activeTab === "missing" && (
-        <div className="w-full max-w-md mx-auto bg-orange-300 rounded-lg shadow p-4">
-          <h2 className="text-lg font-bold mb-4 text-center">My Missing Reports</h2>
-          {missingReports.length === 0 ? (
-            <p className="text-gray-600 text-center">No missing reports yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {missingReports.map((r) =>
-                renderReportCard(
-                  r,
-                  openMissingId === r.id,
-                  () => setOpenMissingId(openMissingId === r.id ? null : r.id),
-                  "missing"
-                )
-              )}
-            </div>
-          )}
-        </div>
-      )}
+          <div>
+            <h2 className="text-lg font-bold mb-4 text-center">My Missing Reports</h2>
+            {missingReports.filter((r) => !r.rescued).length === 0 ? (
+              <p className="text-center text-gray-600">No missing reports.</p>
+            ) : (
+              <div className="space-y-2">
+                {missingReports
+                  .filter((r) => !r.rescued)
+                  .map((r) =>
+                    renderReportCard(
+                      r,
+                      openMissingId === r.id,
+                      () => setOpenMissingId(openMissingId === r.id ? null : r.id),
+                      "missing"
+                    )
+                  )}
+              </div>
+            )}
+          </div>
+        )}
 
-      {activeTab === "found" && (
-        <div className=" w-full max-w-md mx-auto bg-green-300 rounded-lg shadow p-4">
-          <h2 className="text-lg font-bold mb-4 text-center">My Found Reports</h2>
-          {foundReports.length === 0 ? (
-            <p className="text-gray-600 text-center">No found reports yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {foundReports.map((r) =>
-                renderReportCard(
-                  r,
-                  openFoundId === r.id,
-                  () => setOpenFoundId(openFoundId === r.id ? null : r.id),
-                  "found"
-                )
-              )}
-            </div>
-          )}
-        </div>
-      )}
+        {/* Found Reports */}
+        {activeTab === "found" && (
+          <div>
+            <h2 className="text-lg font-bold mb-4 text-center">My Found Reports</h2>
+            {foundReports.filter((r) => !r.rescued).length === 0 ? (
+              <p className="text-center text-gray-600">No found reports.</p>
+            ) : (
+              <div className="space-y-2">
+                {foundReports
+                  .filter((r) => !r.rescued)
+                  .map((r) =>
+                    renderReportCard(
+                      r,
+                      openFoundId === r.id,
+                      () => setOpenFoundId(openFoundId === r.id ? null : r.id),
+                      "found"
+                    )
+                  )}
+              </div>
+            )}
+          </div>
+        )}
 
+        {/* Rescued */}
+        {activeTab === "rescued" && (
+          <div>
+            <h2 className="text-lg font-bold mb-4 text-center">Rescued Pets</h2>
+            <div className="space-y-2">
+              {[...missingReports, ...foundReports]
+                .filter((r) => r.rescued)
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="p-3 bg-green-100 border border-green-400 rounded"
+                  >
+                    <p><strong>Type:</strong> {r.type}</p>
+                    <p><strong>Location:</strong> {r.location}</p>
+                    <p>Status: 🟢 Rescued</p>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Claims */}
+        {activeTab === "claims" && (
+          <div>
+            <h2 className="text-lg font-bold mb-4 text-center">Claims Pending Review</h2>
+            {claims.filter((c) => c.status === "pending").length === 0 ? (
+              <p className="text-center text-gray-600">No claims yet.</p>
+            ) : (
+              claims
+                .filter((c) => c.status === "pending")
+                .map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-4 border rounded mb-3 bg-yellow-50"
+                  >
+                    {c.image_url && (
+                      <img
+                        src={c.image_url}
+                        alt="Proof"
+                        className="w-full h-48 object-cover rounded mb-2"
+                      />
+                    )}
+                    <p className="mb-2"><strong>Remark:</strong> {c.remark}</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleClaimDecision(c, "accepted")}
+                        className="flex-1 px-4 py-2 bg-green-600 text-white rounded"
+                      >
+                        Claimed ✅
+                      </button>
+                      <button
+                        onClick={() => handleClaimDecision(c, "rejected")}
+                        className="flex-1 px-4 py-2 bg-red-500 text-white rounded"
+                      >
+                        Not mine ❌
+                      </button>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        )}
       </main>
 
       {/* Delete Confirmation Modal */}
@@ -331,7 +432,6 @@ export default function Account() {
               <button
                 onClick={() => {
                   setDeleteId(null);
-                  setDeleteImageUrl(null);
                   setDeleteType(null);
                 }}
                 className="flex-1 px-4 py-2 bg-red-500 text-white rounded hover:bg-gray-500"

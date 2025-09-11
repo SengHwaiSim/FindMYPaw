@@ -10,6 +10,7 @@ import imageCompression from "browser-image-compression";
 
 interface AnimalReport {
   id: string;
+  user_id: string;
   image_url: string;
   location: string;
   type: string;
@@ -75,6 +76,12 @@ export default function Rescue() {
   const [step, setStep] = useState<1 | 3>(1);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
+  const [claimingReport, setClaimingReport] = useState<AnimalReport | null>(null);
+  const [claimFile, setClaimFile] = useState<File | null>(null);
+  const [claimPreview, setClaimPreview] = useState<string | null>(null);
+  const [claimRemark, setClaimRemark] = useState("");
+  const [submittingClaim, setSubmittingClaim] = useState(false);
+
 
   // compress image before saving
   const handleFileChange = async (f: File | null) => {
@@ -274,51 +281,80 @@ export default function Rescue() {
       </main>
 
       {openPanel && (
-        <div className="fixed inset-0 flex items-end justify-center bg-black text-gray-700 z-50"
-             style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
-          <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up">
-            <h2 className="text-lg font-bold mb-4 text-center">
-              {openPanel === "missing" ? "Report Missing Animal" : "Report Found Animal"}
-            </h2>
+  <div
+    className="fixed inset-0 flex items-end justify-center bg-black text-gray-700 z-50"
+    style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+  >
+    <div className="relative w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up">
+      {/* ❌ Close Button */}
+      <button
+        onClick={() => {
+          setOpenPanel(null);
+          setStep(1);
+        }}
+        className="absolute top-3 right-3 text-gray-500 hover:text-red-600 text-xl font-bold"
+      >
+        ×
+      </button>
 
-          {/* Step 1 */}
-          {step === 1 && (
-            <div>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                className="mb-2"
-                onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
-              />
-              {previewUrl && (
-                <img src={previewUrl} alt="Preview" className="w-full h-48 object-cover rounded mb-3" />
-              )}
-              <p className="text-xs text-gray-600 mb-3">
-                If you do not know which breed is the pet you can do this. <br />
-                <span className="font-semibold">AI Detect</span> might take a few seconds or longer, and it is not always correct.
-              </p>
-              <div className="flex gap-4 mt-4">
-                <button onClick={() => setStep(3)} disabled={!file || detecting}
-                  className="flex-1 px-4 py-2 bg-gray-400 text-white rounded disabled:opacity-50">
-                  Manual
-                </button>
-                <button onClick={handleAIDetect} disabled={!file || detecting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">
-                  {detecting ? "Detecting..." : "AI Detect"}
-                </button>
-              </div>
-              {detecting && (
-                <p className="mt-3 text-sm text-blue-600 text-center">AI is analyzing the photo, please wait...</p>
-              )}
-            </div>
+      <h2 className="text-lg font-bold mb-4 text-center">
+        {openPanel === "missing" ? "Report Missing Animal" : "Report Found Animal"}
+      </h2>
+
+      {/* Step 1 */}
+      {step === 1 && (
+        <div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="mb-2"
+            onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+          />
+          {previewUrl && (
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="w-full h-48 object-cover rounded mb-3"
+            />
           )}
+          <p className="text-xs text-gray-600 mb-3">
+            If you do not know which breed is the pet you can do this. <br />
+            <span className="font-semibold">AI Detect</span> might take a few seconds or longer, and it is not always correct.
+          </p>
+          <div className="flex gap-4 mt-4">
+            <button
+              onClick={() => setStep(3)}
+              disabled={!file || detecting}
+              className="flex-1 px-4 py-2 bg-orange-400 text-white rounded disabled:opacity-50 font-bold"
+            >
+              Manual
+            </button>
+            <button
+              onClick={handleAIDetect}
+              disabled={!file || detecting}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50 font-bold"
+            >
+              {detecting ? "Detecting..." : "AI Detect"}
+            </button>
+          </div>
+          {detecting && (
+            <p className="mt-3 text-sm text-blue-600 text-center">
+              AI is analyzing the photo, please wait...
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Step 3: Fill in details */}
       {step === 3 && (
         <div>
           {previewUrl && (
-            <img src={previewUrl} alt="Preview" className="w-full h-48 object-cover rounded mb-3" />
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="w-full h-48 object-cover rounded mb-3"
+            />
           )}
 
           {/* Type + Breed */}
@@ -430,7 +466,8 @@ export default function Rescue() {
       )}
     </div>
   </div>
-)}
+      )}
+
 
 
       {confirmReport && (
@@ -463,9 +500,8 @@ export default function Rescue() {
             </button>
             <button
               onClick={() => {
-                // 👇 later you can handle linking, notifications, or chats
-                alert("Confirmed!");
                 setConfirmReport(null);
+                setClaimingReport(confirmReport); // 👈 open claim flow
               }}
               className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
             >
@@ -475,6 +511,126 @@ export default function Rescue() {
         </div>
       </div>
       )}
+
+      {claimingReport && (
+  <div className="fixed inset-0 flex items-end justify-center bg-black z-50" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+    <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up text-gray-700 relative">
+      {/* Close button */}
+      <button
+        onClick={() => {
+          setClaimingReport(null);
+          setClaimFile(null);
+          setClaimRemark("");
+          setClaimPreview(null);
+        }}
+        className="absolute top-3 right-3 text-gray-500 hover:text-red-600 text-xl font-bold"
+      >
+        ×
+      </button>
+
+      <h2 className="text-lg font-bold mb-4 text-center">
+        Submit Confirmation for {claimingReport.type}
+      </h2>
+
+      {/* Upload file */}
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const f = e.target.files?.[0] || null;
+          setClaimFile(f);
+          if (f) setClaimPreview(URL.createObjectURL(f));
+        }}
+        className="mb-2"
+        required
+      />
+      {claimPreview && (
+        <img src={claimPreview} alt="Preview" className="w-full h-48 object-cover rounded mb-3" />
+      )}
+
+      {/* Remark */}
+      <textarea
+        placeholder="Write a remark"
+        value={claimRemark}
+        onChange={(e) => setClaimRemark(e.target.value)}
+        className="w-full mb-2 border p-2 rounded"
+        required
+      />
+
+      <div className="flex justify-between gap-4 mt-4">
+        <button
+          onClick={() => setClaimingReport(null)}
+          className="flex-1 px-4 py-2 bg-red-500 text-white rounded"
+        >
+          Cancel
+        </button>
+        <button
+        onClick={async () => {
+          if (!claimFile) return alert("Please upload a confirmation picture.");
+          if (!claimRemark.trim()) return alert("Please enter a remark.");
+          
+          setSubmittingClaim(true);
+          try {
+            const ext = claimFile.name.split(".").pop();
+            const fileName = `${user?.id}/claim_${Date.now()}.${ext}`;
+            const { error: uploadError } = await supabase.storage
+              .from("claim-images")
+              .upload(fileName, claimFile);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage
+              .from("claim-images")
+              .getPublicUrl(fileName);
+
+            // Save claim record
+            // Save claim record
+            const { error: dbError } = await supabase.from("claims").insert({
+              claimer_id: user?.id,
+              image_url: data.publicUrl,
+              remark: claimRemark,
+              report_type: claimingReport.source,   // "missing" | "found"
+              missing_id: claimingReport.source === "missing" ? claimingReport.id : null,
+              found_id: claimingReport.source === "found" ? claimingReport.id : null,
+            });
+
+            if (dbError) throw dbError;
+
+            // Send email
+            await fetch("/api/send-claim-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                reportId: claimingReport.id,
+                ownerId: claimingReport.user_id,  // ✅ works after Fix 1
+                image: data.publicUrl,
+                remark: claimRemark,
+              }),
+            });
+
+            alert("Claim submitted successfully!");
+            setClaimingReport(null);
+            setClaimFile(null);
+            setClaimPreview(null);
+            setClaimRemark("");
+          } catch (err) {
+            console.error(err);
+            alert("Failed to submit claim");
+          } finally {
+            setSubmittingClaim(false);
+          }
+        }}
+
+          disabled={submittingClaim}
+          className="flex-1 px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+        >
+          {submittingClaim ? "Submitting..." : "Submit Claim"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
 
       <BottomNavigation />
