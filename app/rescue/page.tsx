@@ -23,6 +23,7 @@ interface AnimalReport {
   date_found?: string;
   created_at?: string;
   source: "missing" | "found";
+  rescued?: boolean;
 }
 
 export default function Rescue() {
@@ -72,7 +73,7 @@ export default function Rescue() {
   // state
   const [confirmReport, setConfirmReport] = useState<AnimalReport | null>(null);
   const [allReports, setAllReports] = useState<AnimalReport[]>([]);
-  const [filter, setFilter] = useState<"all" | "missing" | "found">("all");
+  const [filter, setFilter] = useState<"all" | "missing" | "found" | "rescued">("all");
   const [step, setStep] = useState<1 | 3>(1);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
@@ -141,16 +142,27 @@ export default function Rescue() {
   }, []);
 
   const fetchReports = async () => {
-    const { data: missingData } = await supabase.from("missing_animals").select("*").order("created_at", { ascending: false });
-    const { data: foundData } = await supabase.from("found_animals").select("*").order("created_at", { ascending: false });
+    const { data: missingData } = await supabase
+      .from("missing_animals")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    const { data: foundData } = await supabase
+      .from("found_animals")
+      .select("*")
+      .order("created_at", { ascending: false });
 
     const merged: AnimalReport[] = [
-      ...(missingData?.map((m) => ({ ...m, source: "missing" })) || []),
-      ...(foundData?.map((f) => ({ ...f, source: "found" })) || []),
+      ...(missingData?.map((m) => ({ ...m, source: "missing"})) || []),
+      ...(foundData?.map((f) => ({ ...f, source: "found"})) || []),
     ];
-    merged.sort((a, b) =>
-      new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime()
+
+    merged.sort(
+      (a, b) =>
+        new Date(b.created_at || "").getTime() -
+        new Date(a.created_at || "").getTime()
     );
+
     setAllReports(merged);
   };
 
@@ -191,8 +203,12 @@ export default function Rescue() {
   };
 
   // Filtered reports
-  const filteredReports = filter === "all" ? allReports : allReports.filter((r) => r.source === filter);
-
+  const filteredReports =
+  filter === "all"
+    ? allReports.filter((r) => !r.rescued) // show all except rescued
+    : filter === "rescued"
+    ? allReports.filter((r) => r.rescued) // show only rescued pets
+    : allReports.filter((r) => r.source === filter && !r.rescued);
 
   return (
     <div className="flex flex-col h-screen bg-white">
@@ -222,58 +238,80 @@ export default function Rescue() {
           <h2 className="text-2xl font-extrabold text-center">Pet Reports</h2>
 
             {/* Filter Tabs */}
-            <div className="flex ml-21 gap-1 mt-1">
-              {["all", "missing", "found"].map((tab) => (
+            <div className="flex justify-center gap-1 mt-1">
+              {["all", "missing", "found", "rescued"].map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setFilter(tab as "all" | "missing" | "found")}
+                  onClick={() => setFilter(tab as "all" | "missing" | "found" | "rescued")}
                   className={`px-4 py-2 rounded-4xl font-medium ${
                     filter === tab
                       ? "bg-blue-600 text-white"
                       : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                   }`}
                 >
-                  {tab === "all" ? "All" : tab === "missing" ? "Missing" : "Found"}
+                  {tab === "all"
+                    ? "All"
+                    : tab === "missing"
+                    ? "Missing"
+                    : tab === "found"
+                    ? "Found"
+                    : "Rescued"}
                 </button>
               ))}
             </div>
 
+
           {filteredReports.length === 0 ? (
-            <p className="text-gray-600 ">No reports yet.</p>
+            <p className="text-gray-600 flex justify-center align-middle">No reports yet.</p>
           ) : (
             filteredReports.map((r) => (
-              <div
-                key={r.id}
-                className={`p-4 rounded-lg shadow border ${
-                  r.source === "missing" ? "bg-red-50 border-red-500" : "bg-orange-50 border-orange-300"
-                }`}
-                >
-                {r.image_url && (
-                  <img src={r.image_url} alt="Animal" className="w-full h-48 object-cover rounded mb-3" />
-                )}
-                <div className="flex items-baseline gap-2">
-                  <span className="text-base font-bold text-gray-800">
-                    {getDaysAgo(r.source === "missing" ? r.date_missing : r.date_found)}, </span>
-                  <span className="text-xs text-gray-500">
-                    {r.source === "missing" ? r.date_missing : r.date_found}
-                  </span>
-                </div>
+          <div
+            key={r.id}
+            className={`p-4 rounded-lg shadow border ${
+              r.rescued
+                ? "bg-green-100 border-green-500" // ✅ rescued pets in green
+                : r.source === "missing"
+                ? "bg-red-50 border-red-500"
+                : "bg-orange-50 border-orange-300"
+            }`}
+          >
+            {r.image_url && (
+              <img
+                src={r.image_url}
+                alt="Animal"
+                className="w-full h-48 object-cover rounded mb-3"
+              />
+            )}
+            <div className="flex items-baseline gap-2">
+              <span className="text-base font-bold text-gray-800">
+                {getDaysAgo(r.source === "missing" ? r.date_missing : r.date_found)},{" "}
+              </span>
+              <span className="text-xs text-gray-500">
+                {r.source === "missing" ? r.date_missing : r.date_found}
+              </span>
+            </div>
 
-                
-                <p className="text-sm text-gray-700">
-                  <strong>{r.source === "missing" ? "Missing" : "Found"}</strong> • {r.type} • {r.location} • {r.gender || "Unknown"} • {r.age || "Unknown"}
-                </p>
-                {r.remark && (
-                  <p className="text-sm text-gray-700"><strong>Remark:</strong> {r.remark}</p>
-                )}
+            <p className="text-sm text-gray-700">
+              <strong>{r.source === "missing" ? "Missing" : "Found"}</strong> •{" "}
+              {r.type} • {r.location} • {r.gender || "Unknown"} • {r.age || "Unknown"}
+            </p>
+            {r.remark && (
+              <p className="text-sm text-gray-700">
+                <strong>Remark:</strong> {r.remark}
+              </p>
+            )}
 
-                <button
-                  onClick={() => setConfirmReport(r)}
-                  className="mt-3 w-full px-3 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-700"
-                >
-                  {r.source === "missing" ? "I found it!" : "It's my pet!"}
-                </button>
-              </div>
+            {/* ✅ Only show button if NOT rescued */}
+            {!r.rescued && (
+              <button
+                onClick={() => setConfirmReport(r)}
+                className="mt-3 w-full px-3 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-700"
+              >
+                {r.source === "missing" ? "I found it!" : "It's my pet!"}
+              </button>
+            )}
+          </div>
+
 
             ))
           )}

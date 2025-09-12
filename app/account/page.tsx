@@ -54,6 +54,17 @@ interface ClaimData {
   found_owner: string | null;
 }
 
+interface RescuedAnimal {
+  id: string;
+  report_id: string;
+  report_type: string;
+  owner_id: string;
+  claimer_id: string;
+  created_at: string;
+  missing_animals: MissingAnimal | null;
+  found_animals: FoundAnimal | null;
+}
+
 
 export default function Account() {
   const supabase = createClientComponentClient();
@@ -64,6 +75,11 @@ export default function Account() {
   const [foundReports, setFoundReports] = useState<FoundAnimal[]>([]);
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rescued, setRescued] = useState<RescuedAnimal[]>([]);
+  const [confirmClaim, setConfirmClaim] = useState<{ claim: Claim; decision: "accepted" | "rejected" } | null>(null);
+
+
+
 
   const [activeTab, setActiveTab] = useState<
     "missing" | "found" | "rescued" | "claims"
@@ -86,11 +102,28 @@ export default function Account() {
         setUser(data.user);
         await fetchReports(data.user.id);
         await fetchClaims(data.user.id);
+        await fetchRescued(data.user.id);
       }
       setLoading(false);
     };
     loadUser();
   }, []);
+
+  const fetchRescued = async (userId: string) => {
+  const { data, error } = await supabase
+    .from("rescued_animals")
+    .select("*, missing_animals(*), found_animals(*)")
+    .or(`owner_id.eq.${userId},claimer_id.eq.${userId}`)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Fetch rescued error:", error);
+    return;
+  }
+
+  setRescued(data || []);
+};
+
 
   const fetchReports = async (userId: string) => {
     const { data: missingData } = await supabase
@@ -169,23 +202,69 @@ const fetchClaims = async (userId: string) => {
     decision: "accepted" | "rejected"
   ) => {
     try {
-      await supabase
+      // 1. Update claim status
+      const { error: claimUpdateError } = await supabase
         .from("claims")
         .update({ status: decision })
         .eq("id", claim.id);
 
+      if (claimUpdateError) throw claimUpdateError;
+
       if (decision === "accepted") {
         const table =
           claim.report_type === "missing" ? "missing_animals" : "found_animals";
-        await supabase.from(table).update({ rescued: true }).eq("id", claim.report_id);
+
+        // 2. Update the report (set rescued = true)
+        const { data: updatedReport, error: updateError } = await supabase
+          .from(table)
+          .update({ rescued: true })
+          .eq("id", claim.report_id)
+          .select("id, rescued")
+          .maybeSingle();
+
+        if (updateError) throw updateError;
+        if (!updatedReport || updatedReport.rescued !== true) {
+          throw new Error(`Rescue flag not set on ${table} id=${claim.report_id}`);
+        }
+
+        // 3. Insert into rescued_animals
+        const { error: insertError } = await supabase
+          .from("rescued_animals")
+          .insert({
+            report_type: claim.report_type,
+            owner_id: user!.id, // owner of the report
+            claimer_id: claim.claimer_id, // the person claiming
+            missing_id: claim.report_type === "missing" ? claim.report_id : null,
+            found_id: claim.report_type === "found" ? claim.report_id : null,
+          });
+
+        if (insertError) throw insertError;
+
+        // 4. Update local state instantly
+        if (claim.report_type === "missing") {
+          setMissingReports((prev) =>
+            prev.filter((r) => r.id !== claim.report_id)
+          );
+        } else {
+          setFoundReports((prev) =>
+            prev.filter((r) => r.id !== claim.report_id)
+          );
+        }
+
+        setClaims((prev) => prev.filter((c) => c.id !== claim.id));
       }
 
-      fetchReports(user!.id);
-      fetchClaims(user!.id);
+      // 5. Refresh rescued list
+      await fetchRescued(user!.id);
     } catch (err) {
       console.error("Claim decision failed:", err);
+      const message = err instanceof Error ? err.message : JSON.stringify(err);
+      alert(`Claim decision failed: ${message}`);
     }
   };
+
+
+
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -355,24 +434,37 @@ const fetchClaims = async (userId: string) => {
 
         {/* Rescued */}
         {activeTab === "rescued" && (
-          <div>
-            <h2 className="text-lg font-bold mb-4 text-center">Rescued Pets</h2>
+        <div>
+          <h2 className="text-lg font-bold mb-4 text-center">Rescued Pets</h2>
+          {rescued.length === 0 ? (
+            <p className="text-center text-gray-600">No rescued pets yet.</p>
+          ) : (
             <div className="space-y-2">
-              {[...missingReports, ...foundReports]
-                .filter((r) => r.rescued)
-                .map((r) => (
+              {rescued.map((r) => {
+                const pet = r.missing_animals || r.found_animals;
+                return (
                   <div
                     key={r.id}
                     className="p-3 bg-green-100 border border-green-400 rounded"
                   >
-                    <p><strong>Type:</strong> {r.type}</p>
-                    <p><strong>Location:</strong> {r.location}</p>
-                    <p>Status: 🟢 Rescued</p>
+                    {pet?.image_url && (
+                      <img
+                        src={pet.image_url}
+                        alt="Pet"
+                        className="w-full h-48 object-cover rounded mb-2"
+                      />
+                    )}
+                    <p><strong>Type:</strong> {pet?.type}</p>
+                    <p><strong>Location:</strong> {pet?.location}</p>
+                    <p><strong>Status:</strong> 🟢 Rescued</p>
                   </div>
-                ))}
+                );
+              })}
             </div>
-          </div>
+          )}
+        </div>
         )}
+
 
         {/* Claims */}
         {activeTab === "claims" && (
@@ -397,17 +489,17 @@ const fetchClaims = async (userId: string) => {
                     )}
                     <p className="mb-2"><strong>Remark:</strong> {c.remark}</p>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleClaimDecision(c, "accepted")}
+                    <button
+                        onClick={() => setConfirmClaim({ claim: c, decision: "accepted" })}
                         className="flex-1 px-4 py-2 bg-green-600 text-white rounded"
                       >
-                        Claimed ✅
+                        Claimed
                       </button>
                       <button
                         onClick={() => handleClaimDecision(c, "rejected")}
                         className="flex-1 px-4 py-2 bg-red-500 text-white rounded"
                       >
-                        Not mine ❌
+                        Not mine 
                       </button>
                     </div>
                   </div>
@@ -448,6 +540,45 @@ const fetchClaims = async (userId: string) => {
           </div>
         </div>
       )}
+
+      {confirmClaim && (
+      <div
+        className="fixed inset-0 flex items-center justify-center bg-black z-50 text-gray-700"
+        style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+      >
+        <div className="bg-white rounded-lg p-6 w-80 shadow-lg text-center">
+          <h3 className="text-lg font-bold mb-4">Confirm Action</h3>
+          <p className="text-sm text-gray-600 mb-6">
+            {confirmClaim.decision === "accepted"
+              ? "Are you sure this pet belongs to you? Once claimed, it will be moved to the rescued list."
+              : "Are you sure this pet is not yours? This action cannot be undone."}
+          </p>
+          <div className="flex justify-between gap-4">
+            <button
+              onClick={() => setConfirmClaim(null)}
+              className="flex-1 px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                await handleClaimDecision(confirmClaim.claim, confirmClaim.decision);
+                setConfirmClaim(null);
+              }}
+              className={`flex-1 px-4 py-2 text-white rounded ${
+                confirmClaim.decision === "accepted"
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-red-500 hover:bg-red-600"
+              }`}
+            >
+              {confirmClaim.decision === "accepted" ? "Yes, Claim" : "Yes, Reject"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+
 
       <BottomNavigation />
     </div>
