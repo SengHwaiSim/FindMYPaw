@@ -7,7 +7,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
   ({ className, ...props }, ref) => {
-    return <div ref={ref} className={cn('rounded-lg border bg-card text-card-foreground shadow-sm', className)} {...props} />;
+    return <div ref={ref} className={cn('align-middle rounded-lg border bold bg-card text-card-foreground shadow-sm', className)} {...props} />;
   }
 );
 Card.displayName = 'Card';
@@ -18,7 +18,7 @@ interface CardContentProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
   ({ className, ...props }, ref) => {
-    return <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />;
+    return <div ref={ref} className={cn('p-3', className)} {...props} />;
   }
 );
 CardContent.displayName = 'CardContent';

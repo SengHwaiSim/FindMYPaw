@@ -282,19 +282,25 @@ const fetchClaims = async (userId: string) => {
     return `${diffDays} days ago`;
   };
 
-  const renderReportCard = (
-    r: MissingAnimal | FoundAnimal,
-    isOpen: boolean,
-    toggle: () => void,
-    type: "missing" | "found"
-  ) => (
+const renderReportCard = (
+  r: MissingAnimal | FoundAnimal,
+  isOpen: boolean,
+  toggle: () => void,
+  type: "missing" | "found"
+) => {
+  const colors =
+    type === "missing"
+      ? "bg-red-50 border-red-400"
+      : "bg-orange-50 border-orange-400";
+
+  return (
     <div
       key={r.id}
-      className="bg-white rounded-lg shadow-sm border border-gray-200"
+      className={`rounded-lg shadow-sm border ${colors}`}
     >
       <button
         onClick={toggle}
-        className="w-full flex items-center gap-3 p-3 text-left"
+        className={`w-full flex items-center gap-3 p-3 text-left ${colors}`}
       >
         {r.image_url && (
           <img
@@ -342,6 +348,8 @@ const fetchClaims = async (userId: string) => {
       )}
     </div>
   );
+};
+
 
   return (
     <div className="flex flex-col h-screen bg-white">
@@ -445,7 +453,7 @@ const fetchClaims = async (userId: string) => {
                 return (
                   <div
                     key={r.id}
-                    className="p-3 bg-green-100 border border-green-400 rounded"
+                    className="p-3 bg-green-50 border border-green-500 rounded"
                   >
                     {pet?.image_url && (
                       <img
@@ -478,7 +486,7 @@ const fetchClaims = async (userId: string) => {
                 .map((c) => (
                   <div
                     key={c.id}
-                    className="p-4 border rounded mb-3 bg-yellow-50"
+                    className="p-4 border rounded mb-3 border-blue-500 bg-blue-50"
                   >
                     {c.image_url && (
                       <img

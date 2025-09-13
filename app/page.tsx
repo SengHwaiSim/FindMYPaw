@@ -34,55 +34,78 @@ export default function Page() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-100 text-gray-700 p-5 pb-30">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 ">
-        <h1 className="text-2xl font-bold text-center mb-4 ">
-          {isLogin ? "Login" : "Register"}
-        </h1 >
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+    <main className="relative min-h-screen flex items-center justify-center font-[Poppins] bg-gray-300 text-gray-700">
+            {/* Background shapes */}
+      <div className="absolute w-[430px] h-[520px] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div className="absolute h-[200px] w-[200px] rounded-full bg-gradient-to-b from-[#1845ad] to-[#23a2f6] -left-20 -top-20"></div>
+        <div className="absolute h-[200px] w-[200px] rounded-full bg-gradient-to-r from-[#ff512f] to-[#f09819] -right-8 -bottom-20"></div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col space-y-4 ">
-          {!isLogin && (
+      {/* Glass Form */}
+      <form
+        onSubmit={handleSubmit}
+        className="relative z-10 w-[350px] h-[500px] bg-white/10 backdrop-blur-lg border border-white/20 rounded-lg shadow-[0_0_40px_rgba(8,7,16,0.6)] p-8 flex flex-col"
+      >
+        <h3 className="text-3xl font-medium text-black text-center mb-6">
+          {isLogin ? "Login FindMYPaw" : "Register FindMYPaw"}
+        </h3>
+
+        {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+
+        {!isLogin && (
+          <>
+            <label className="text-black mt-4">Username</label>
             <input
               type="text"
-              placeholder="Username"
-              className="border p-2 rounded"
+              placeholder="Enter username"
+              className="h-[50px] w-full bg-gray-100 rounded px-3 mt-2 text-black placeholder-gray-500 text-sm"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
             />
-          )}
-          <input
-            type="email"
-            placeholder="Email"
-            className="border p-2 rounded"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            className="border p-2 rounded"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <button className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
-            {isLogin ? "Login" : "Register"}
-          </button>
-        </form>
+          </>
+        )}
 
-        <p className="text-sm text-center mt-4">
+        <label className="text-black mt-4">Email</label>
+        <input
+          type="email"
+          placeholder="Enter your email"
+          className="h-[50px] w-full bg-gray-100 rounded px-3 mt-2 text-black placeholder-gray-500 text-sm"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+
+        <label className="text-black mt-4">Password</label>
+        <input
+          type="password"
+          placeholder="Enter your password"
+          className="h-[50px] w-full bg-gray-100 rounded px-3 mt-2 text-black placeholder-gray-500 text-sm"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+
+        <button
+          type="submit"
+          className="mt-10 w-full bg-[#f09819]  text-white py-3 rounded font-semibold text-lg hover:bg-gray-200 transition"
+        >
+          {isLogin ? "Log In" : "Register"}
+        </button>
+
+
+        {/* Switch Login/Register */}
+        <p className="text-center text-black text-sm mt-6">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
           <button
+            type="button"
             onClick={() => setIsLogin(!isLogin)}
-            className="text-blue-600 underline"
+            className="text-blue-300 underline"
           >
             {isLogin ? "Register" : "Login"}
           </button>
         </p>
-      </div>
+      </form>
     </main>
   );
 }
