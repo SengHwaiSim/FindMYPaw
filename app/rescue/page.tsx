@@ -34,7 +34,7 @@ export default function Rescue() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [openPanel, setOpenPanel] = useState<"missing" | "found" | null>(null);
+  const [openPanel, setOpenPanel] = useState<"missing" | "found" | "scan" | null>(null);
 
   // form fields
   const [date, setDate] = useState("");
@@ -82,6 +82,10 @@ export default function Rescue() {
   const [claimPreview, setClaimPreview] = useState<string | null>(null);
   const [claimRemark, setClaimRemark] = useState("");
   const [submittingClaim, setSubmittingClaim] = useState(false);
+  const [openReportMenu, setOpenReportMenu] = useState(false);
+    const [scanResults, setScanResults] = useState<AnimalReport[]>([]);
+    const [showScanResults, setShowScanResults] = useState(false);
+
 
 
   // compress image before saving
@@ -215,19 +219,13 @@ export default function Rescue() {
       <TopHeader />
 
       <main className="flex-1 overflow-y-auto px-4 gap-6 py-4 text-gray-700 ">
-        {/* Buttons */}
-        <div className="flex items-center gap-3">
+        {/* Make Report Button */}
+        <div className="flex items-center justify-center">
           <button
-            onClick={() => setOpenPanel("missing")}
-            className="px-6 py-3 bg-red-300 text-gray-700 rounded-lg shadow w-full max-w font-bold"
+            onClick={() => setOpenReportMenu(true)}
+            className="px-6 py-3 w-full bg-yellow-400 text-gray-900 rounded-lg shadow font-bold"
           >
-            Report Missing
-          </button>
-          <button
-            onClick={() => setOpenPanel("found")}
-            className="px-6 py-3 bg-orange-300 text-gray-700 rounded-lg shadow w-full max-w-sm font-bold"
-          >
-            Report Found
+            Make A Report
           </button>
         </div>
 
@@ -301,15 +299,26 @@ export default function Rescue() {
               </p>
             )}
 
-            {/* ✅ Only show button if NOT rescued */}
-            {!r.rescued && (
-              <button
-                onClick={() => setConfirmReport(r)}
-                className="mt-3 w-full px-3 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-700"
-              >
-                {r.source === "missing" ? "I found it!" : "It's my pet!"}
-              </button>
-            )}
+            <button
+              onClick={() => {
+                if (r.user_id !== user?.id && !r.rescued) setConfirmReport(r);
+              }}
+              disabled={r.user_id === user?.id || r.rescued}
+              className={`mt-3 w-full px-3 py-2 rounded-lg font-semibold ${
+                r.user_id === user?.id || r.rescued
+                  ? "bg-red-300 text-white cursor-not-allowed"
+                  : "bg-blue-500 text-white hover:bg-blue-700"
+              }`}
+            >
+              {r.user_id === user?.id
+                ? "This is your report"
+                : r.rescued
+                ? "Already rescued"
+                : r.source === "missing"
+                ? "I found it!"
+                : "It's my pet!"}
+            </button>
+
           </div>
 
 
@@ -336,8 +345,13 @@ export default function Rescue() {
       </button>
 
       <h2 className="text-lg font-bold mb-4 text-center">
-        {openPanel === "missing" ? "Report Missing Animal" : "Report Found Animal"}
+        {openPanel === "missing"
+          ? "Report Missing Animal"
+          : openPanel === "found"
+          ? "Report Found Animal"
+          : "Scan Animal Through Database"}
       </h2>
+
 
       {/* Step 1 */}
       {step === 1 && (
@@ -384,15 +398,117 @@ export default function Rescue() {
         </div>
       )}
 
-      {/* Step 3: Fill in details */}
-      {step === 3 && (
+      {/* Step 3: limited fields for SCAN */}
+      {step === 3 && openPanel === "scan" && (
         <div>
           {previewUrl && (
-            <img
-              src={previewUrl}
-              alt="Preview"
-              className="w-full h-48 object-cover rounded mb-3"
-            />
+            <img src={previewUrl} alt="Preview" className="w-full h-48 object-cover rounded mb-3" />
+          )}
+
+          {/* Type (required) */}
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+            required
+          >
+            <option value="">Select Type *</option>
+            <option value="Dog">Dog</option>
+            <option value="Cat">Cat</option>
+          </select>
+
+          {/* Location (required) */}
+          <select
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+            required
+          >
+            <option value="">Select Location *</option>
+            {malaysiaStates.map((state) => (
+              <option key={state} value={state}>{state}</option>
+            ))}
+          </select>
+
+          {/* Breed (optional) */}
+          <input
+            type="text"
+            placeholder="Breed (optional)"
+            value={breed}
+            onChange={(e) => setBreed(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+          />
+
+          {/* Gender (optional) */}
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
+            className="w-full mb-2 border p-2 rounded"
+          >
+            <option value="">Select Gender (optional)</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Don't know">Don&apos;t know</option>
+          </select>
+
+          <div className="flex justify-between mt-4">
+            <button
+              onClick={() => { setOpenPanel(null); setStep(1); }}
+              className="px-4 py-2 bg-red-500 text-white rounded"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                if (!type || !location) return alert("Please select Type and Location.");
+
+                try {
+                  // Fetch both missing and found
+                  const { data: missingData } = await supabase.from("missing_animals").select("*");
+                  const { data: foundData } = await supabase.from("found_animals").select("*");
+
+                  const merged: AnimalReport[] = [
+                    ...(missingData?.map((m) => ({ ...m, source: "missing" })) || []),
+                    ...(foundData?.map((f) => ({ ...f, source: "found" })) || []),
+                  ];
+
+                  // ✅ filter out rescued reports first
+                  const notRescued = merged.filter((r) => !r.rescued);
+
+                  // Then check at least 2 fields match
+                  const results = notRescued.filter((r) => {
+                    let matches = 0;
+                    if (r.type?.toLowerCase() === type.toLowerCase()) matches++;
+                    if (r.location?.toLowerCase() === location.toLowerCase()) matches++;
+                    if (breed && r.breed?.toLowerCase() === breed.toLowerCase()) matches++;
+                    if (gender && r.gender?.toLowerCase() === gender.toLowerCase()) matches++;
+                    return matches >= 2;
+                  });
+
+                  setScanResults(results);
+                  setShowScanResults(true);
+                  setOpenPanel(null);
+                  setStep(1);
+
+                } catch (err) {
+                  console.error(err);
+                  alert("Error while scanning database.");
+                }
+              }}
+
+              className="px-4 py-2 bg-green-600 text-white rounded"
+            >
+              Submit Scan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: FULL form for MISSING/FOUND (your existing block unchanged) */}
+      {step === 3 && (openPanel === "missing" || openPanel === "found") && (
+        <div>
+          {previewUrl && (
+            <img src={previewUrl} alt="Preview" className="w-full h-48 object-cover rounded mb-3" />
           )}
 
           {/* Type + Breed */}
@@ -434,9 +550,7 @@ export default function Rescue() {
               {openPanel === "missing" ? "Select Missing Location *" : "Select Found Location *"}
             </option>
             {malaysiaStates.map((state) => (
-              <option key={state} value={state}>
-                {state}
-              </option>
+              <option key={state} value={state}>{state}</option>
             ))}
           </select>
 
@@ -449,7 +563,7 @@ export default function Rescue() {
             <option value="">Select Gender</option>
             <option value="Male">Male</option>
             <option value="Female">Female</option>
-            <option value="Don't know">Don`&apos;`t know</option>
+            <option value="Don't know">Don&apos;t know</option>
           </select>
 
           {/* Age */}
@@ -460,9 +574,7 @@ export default function Rescue() {
           >
             <option value="">Select Age</option>
             {ageOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
+              <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
 
@@ -484,10 +596,7 @@ export default function Rescue() {
           {/* Buttons */}
           <div className="flex justify-between mt-4">
             <button
-              onClick={() => {
-                setOpenPanel(null);
-                setStep(1);
-              }}
+              onClick={() => { setOpenPanel(null); setStep(1); }}
               className="px-4 py-2 bg-red-500 text-white rounded"
             >
               Cancel
@@ -502,6 +611,7 @@ export default function Rescue() {
           </div>
         </div>
       )}
+
     </div>
   </div>
       )}
@@ -667,7 +777,136 @@ export default function Rescue() {
       </div>
     </div>
   </div>
-)}
+      )}
+
+      {/* Report Menu Modal */}
+      {openReportMenu && (
+        <div
+          className="fixed inset-0 flex items-end justify-center bg-black z-50"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+        >
+          <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up text-gray-700 relative">
+            {/* Close button */}
+            <button
+              onClick={() => setOpenReportMenu(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-red-600 text-xl font-bold"
+            >
+              ×
+            </button>
+
+            <h2 className="text-lg font-bold mb-4 text-center">Make a Report</h2>
+
+            {/* Scan Animal */}
+            <button
+              onClick={() => {
+                setOpenReportMenu(false);
+                setOpenPanel("scan");
+              }}
+              className="w-full mb-2 px-4 py-3 bg-yellow-400 text-gray-800 font-bold rounded-lg shadow hover:bg-yellow-500"
+            >
+              Scan Animal Through Database
+            </button>
+            <p className="text-xs text-gray-600 mb-4 text-center">
+              We recommend everyone to check if the pets are registered in our database before creating a new report.
+            </p>
+
+            {/* Report Missing */}
+            <button
+              onClick={() => {
+                setOpenReportMenu(false);
+                setOpenPanel("missing");
+              }}
+              className="w-full mb-2 px-4 py-3 bg-red-400 text-white font-bold rounded-lg shadow hover:bg-red-500"
+            >
+              Report Missing
+            </button>
+
+            {/* Report Found */}
+            <button
+              onClick={() => {
+                setOpenReportMenu(false);
+                setOpenPanel("found");
+              }}
+              className="w-full px-4 py-3 bg-orange-400 text-white font-bold rounded-lg shadow hover:bg-orange-500"
+            >
+              Report Found
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showScanResults && (
+      <div className="fixed inset-0 flex items-end justify-center bg-black z-50" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+        <div className="w-full max-w-md bg-white rounded-t-2xl p-6 shadow-lg animate-slide-up text-gray-700">
+          <h2 className="text-lg font-bold mb-4 text-center">Scan Results</h2>
+
+          {scanResults.length === 0 ? (
+            <p className="text-gray-600 text-center">No close matches found.</p>
+          ) : (
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              {scanResults.map((r) => (
+                <div
+                  key={r.id}
+                  className={`p-4 rounded-lg shadow border ${
+                    r.source === "missing"
+                      ? "bg-red-50 border-red-500"
+                      : "bg-orange-50 border-orange-300"
+                  }`}
+                >
+                  {r.image_url && (
+                    <img
+                      src={r.image_url}
+                      alt="Animal"
+                      className="w-full h-48 object-cover rounded mb-3"
+                    />
+                  )}
+                  <p className="text-sm text-gray-700">
+                    <strong>{r.source === "missing" ? "Missing" : "Found"}</strong> •{" "}
+                    {r.type} • {r.location} • {r.gender || "Unknown"} • {r.age || "Unknown"}
+                  </p>
+                  {r.breed && <p className="text-sm"><strong>Breed:</strong> {r.breed}</p>}
+                  {r.remark && <p className="text-sm"><strong>Remark:</strong> {r.remark}</p>}
+
+                  <button
+                    onClick={() => {
+                      if (r.user_id !== user?.id && !r.rescued) {
+                        setShowScanResults(false);
+                        setConfirmReport(r);
+                      }
+                    }}
+                    disabled={r.user_id === user?.id || r.rescued}
+                    className={`mt-3 w-full px-3 py-2 rounded-lg font-semibold ${
+                      r.user_id === user?.id || r.rescued
+                        ? "bg-red-300 text-white cursor-not-allowed"
+                        : "bg-blue-500 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {r.user_id === user?.id
+                      ? "This is your report"
+                      : r.rescued
+                      ? "Already rescued"
+                      : r.source === "missing"
+                      ? "I found it!"
+                      : "It's my pet!"}
+                  </button>
+
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={() => setShowScanResults(false)}
+              className="px-4 py-2 bg-red-500 text-white rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
 
 
 

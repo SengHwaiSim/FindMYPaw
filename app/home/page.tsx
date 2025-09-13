@@ -47,64 +47,77 @@ export default function Dashboard() {
       else setUser(data.user);
     });
 
-    async function fetchStats() {
-      const { data: missing } = await supabase.from("missing_animals").select("created_at, type, rescued");
-      const { data: found } = await supabase.from("found_animals").select("created_at, type, rescued");
-      const { data: rescued } = await supabase.from("rescued_animals").select("created_at");
-      const { data: claims } = await supabase.from("claims").select("status");
+  async function fetchStats() {
+    const { data: missing } = await supabase
+      .from("missing_animals")
+      .select("date_missing, type, rescued");
+    const { data: found } = await supabase
+      .from("found_animals")
+      .select("date_found, type, rescued");
+    const { data: rescued } = await supabase
+      .from("rescued_animals")
+      .select("created_at");
+    const { data: claims } = await supabase
+      .from("claims")
+      .select("status");
 
-      // --- Weekly trends ---
-      const weeklyCounts: Record<string, { missing: number; found: number; rescued: number }> = {};
+    // --- Weekly trends ---
+    const weeklyCounts: Record<string, { missing: number; found: number; rescued: number }> = {};
 
-      function getWeek(dateStr: string) {
-        const d = new Date(dateStr);
-        const firstJan = new Date(d.getFullYear(), 0, 1);
-        const week = Math.ceil(((d.getTime() - firstJan.getTime()) / 86400000 + firstJan.getDay() + 1) / 7);
-        const month = d.toLocaleString("default", { month: "short" });
-        return `W${week}(${month}) ${d.getFullYear()}`;
-      }
-
-      missing?.forEach((m) => {
-        const week = getWeek(m.created_at);
-        if (!weeklyCounts[week]) weeklyCounts[week] = { missing: 0, found: 0, rescued: 0 };
-        weeklyCounts[week].missing++;
-      });
-
-      found?.forEach((f) => {
-        const week = getWeek(f.created_at);
-        if (!weeklyCounts[week]) weeklyCounts[week] = { missing: 0, found: 0, rescued: 0 };
-        weeklyCounts[week].found++;
-      });
-
-      rescued?.forEach((r) => {
-        const week = getWeek(r.created_at);
-        if (!weeklyCounts[week]) weeklyCounts[week] = { missing: 0, found: 0, rescued: 0 };
-        weeklyCounts[week].rescued++;
-      });
-
-      // --- Pet type distribution ---
-      const typeCounts: Record<string, number> = {};
-      [...(missing || []), ...(found || [])].forEach((a) => {
-        if (a.type) typeCounts[a.type] = (typeCounts[a.type] || 0) + 1;
-      });
-
-      setStats({
-        missing: missing?.length || 0,
-        found: found?.length || 0,
-        rescued: rescued?.length || 0,
-        claims:
-          claims?.reduce(
-            (acc: Record<string, number>, c: { status: string }) => {
-              acc[c.status] = (acc[c.status] || 0) + 1;
-              return acc;
-            },
-            {}
-          ) ?? {},
-        weeklyData: Object.entries(weeklyCounts)
-          .map(([week, counts]) => ({ week, ...counts })),
-        typeData: Object.entries(typeCounts).map(([type, value]) => ({ type, value })),
-      });
+    function getWeek(dateStr: string) {
+      const d = new Date(dateStr);
+      const firstJan = new Date(d.getFullYear(), 0, 1);
+      const week = Math.ceil(((d.getTime() - firstJan.getTime()) / 86400000 + firstJan.getDay() + 1) / 7);
+      const month = d.toLocaleString("default", { month: "short" });
+      return `W${week}(${month}) ${d.getFullYear()}`;
     }
+
+    // Use date_missing for missing animals
+    missing?.forEach((m) => {
+      if (!m.date_missing) return;
+      const week = getWeek(m.date_missing);
+      if (!weeklyCounts[week]) weeklyCounts[week] = { missing: 0, found: 0, rescued: 0 };
+      weeklyCounts[week].missing++;
+    });
+
+    // Use date_found for found animals
+    found?.forEach((f) => {
+      if (!f.date_found) return;
+      const week = getWeek(f.date_found);
+      if (!weeklyCounts[week]) weeklyCounts[week] = { missing: 0, found: 0, rescued: 0 };
+      weeklyCounts[week].found++;
+    });
+
+    // Keep created_at for rescued (unless you also add a `date_rescued` column later)
+    rescued?.forEach((r) => {
+      const week = getWeek(r.created_at);
+      if (!weeklyCounts[week]) weeklyCounts[week] = { missing: 0, found: 0, rescued: 0 };
+      weeklyCounts[week].rescued++;
+    });
+
+    // --- Pet type distribution (same logic as before) ---
+    const typeCounts: Record<string, number> = {};
+    [...(missing || []), ...(found || [])].forEach((a) => {
+      if (a.type) typeCounts[a.type] = (typeCounts[a.type] || 0) + 1;
+    });
+
+    setStats({
+      missing: missing?.length || 0,
+      found: found?.length || 0,
+      rescued: rescued?.length || 0,
+      claims:
+        claims?.reduce(
+          (acc: Record<string, number>, c: { status: string }) => {
+            acc[c.status] = (acc[c.status] || 0) + 1;
+            return acc;
+          },
+          {}
+        ) ?? {},
+      weeklyData: Object.entries(weeklyCounts).map(([week, counts]) => ({ week, ...counts })),
+      typeData: Object.entries(typeCounts).map(([type, value]) => ({ type, value })),
+    });
+  }
+
 
     fetchStats();
   }, []);
@@ -236,49 +249,70 @@ const claimData = [
           </div>
         </div>
 
-        {/* Rescue Success Rate Gauge */}
+        {/* Rescue Success Rate Gauge (half-donut, one ring: green+red) */}
         <div className="pt-5">
           <h2 className="text-md font-semibold mb-2">Rescue Success Rate</h2>
           <div className="w-full h-64 flex flex-col items-center justify-center">
             <ResponsiveContainer width="100%" height={250}>
-              <RadialBarChart
-                innerRadius="70%"
-                outerRadius="100%"
-                data={[
-                  {
-                    name: "Success",
-                    value: stats.missing > 0 ? Math.round((stats.rescued / stats.missing) * 100) : 0,
-                    fill: "#82ca9d",
-                  },
-                ]}
-                startAngle={180}
-                endAngle={0} // half-circle
-              >
-                <RadialBar dataKey="value" cornerRadius={10} />
-                <Tooltip />
-                <Legend />
-                <text
-                  x="50%"
-                  y="65%"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="text-xl font-bold fill-gray-700"
-                >
-                  {stats.missing > 0 ? Math.round((stats.rescued / stats.missing) * 100) : 0}%
-                </text>
-                <text
-                  x="50%"
-                  y="80%"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="text-sm fill-gray-600"
-                >
-                  {stats.rescued} rescued / {stats.missing} missing ({stillMissing} still missing)
-                </text>
-              </RadialBarChart>
+              {(() => {
+                const total = Math.max(stats.missing, 0);
+                const rescuedCount = Math.min(stats.rescued, total);
+                const still = Math.max(total - rescuedCount, 0);
+                const pct = total > 0 ? Math.round((rescuedCount / total) * 100) : 0;
+
+                const gaugeData = [
+                  { name: "Rescued", value: rescuedCount, fill: "#34d399" }, // green
+                  { name: "Still Missing", value: still, fill: "#f87171" },  // red
+                ];
+
+                return (
+                  <PieChart>
+                    <Pie
+                      data={gaugeData}
+                      dataKey="value"
+                      nameKey="name"
+                      startAngle={180}
+                      endAngle={0}
+                      innerRadius="70%"
+                      outerRadius="100%"
+                      paddingAngle={0}        // no gaps; one continuous half-ring
+                      stroke="none"           // cleaner ring
+                    >
+                      {gaugeData.map((d, i) => (
+                        <Cell key={d.name} fill={d.fill} />
+                      ))}
+                    </Pie>
+
+                    <Tooltip />
+                    <Legend />
+
+                    {/* Center labels */}
+                    <text
+                      x="50%"
+                      y="60%"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="text-xl font-bold fill-gray-700"
+                    >
+                      {pct}%
+                    </text>
+                    <text
+                      x="50%"
+                      y="75%"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="text-sm fill-gray-600"
+                    >
+                      {rescuedCount} rescued / {total} missing ({still} still missing)
+                    </text>
+                  </PieChart>
+                );
+              })()}
             </ResponsiveContainer>
           </div>
         </div>
+
+
       </main>
       <BottomNavigation />
     </div>

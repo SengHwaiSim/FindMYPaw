@@ -77,7 +77,10 @@ export default function Account() {
   const [loading, setLoading] = useState(true);
   const [rescued, setRescued] = useState<RescuedAnimal[]>([]);
   const [confirmClaim, setConfirmClaim] = useState<{ claim: Claim; decision: "accepted" | "rejected" } | null>(null);
+  const [confirmReject, setConfirmReject] = useState<Claim | null>(null);
 
+
+ 
 
 
 
@@ -202,15 +205,15 @@ const fetchClaims = async (userId: string) => {
     decision: "accepted" | "rejected"
   ) => {
     try {
-      // 1. Update claim status
-      const { error: claimUpdateError } = await supabase
-        .from("claims")
-        .update({ status: decision })
-        .eq("id", claim.id);
-
-      if (claimUpdateError) throw claimUpdateError;
-
       if (decision === "accepted") {
+        // 1. Update claim status → accepted
+        const { error: claimUpdateError } = await supabase
+          .from("claims")
+          .update({ status: "accepted" })
+          .eq("id", claim.id);
+
+        if (claimUpdateError) throw claimUpdateError;
+
         const table =
           claim.report_type === "missing" ? "missing_animals" : "found_animals";
 
@@ -232,39 +235,45 @@ const fetchClaims = async (userId: string) => {
           .from("rescued_animals")
           .insert({
             report_type: claim.report_type,
-            owner_id: user!.id, // owner of the report
-            claimer_id: claim.claimer_id, // the person claiming
+            owner_id: user!.id,
+            claimer_id: claim.claimer_id,
             missing_id: claim.report_type === "missing" ? claim.report_id : null,
             found_id: claim.report_type === "found" ? claim.report_id : null,
           });
 
         if (insertError) throw insertError;
 
-        // 4. Update local state instantly
+        // 4. Remove from local state
         if (claim.report_type === "missing") {
-          setMissingReports((prev) =>
-            prev.filter((r) => r.id !== claim.report_id)
-          );
+          setMissingReports((prev) => prev.filter((r) => r.id !== claim.report_id));
         } else {
-          setFoundReports((prev) =>
-            prev.filter((r) => r.id !== claim.report_id)
-          );
+          setFoundReports((prev) => prev.filter((r) => r.id !== claim.report_id));
         }
 
         setClaims((prev) => prev.filter((c) => c.id !== claim.id));
+      } else if (decision === "rejected") {
+        // ❌ Instead of updating → delete claim
+        const { error: deleteError } = await supabase
+          .from("claims")
+          .delete()
+          .eq("id", claim.id);
+
+        if (deleteError) throw deleteError;
+
+        // Remove from local state
+        setClaims((prev) => prev.filter((c) => c.id !== claim.id));
       }
 
-      // 5. Refresh rescued list
-      await fetchRescued(user!.id);
+      // Refresh rescued list after accepted
+      if (decision === "accepted") {
+        await fetchRescued(user!.id);
+      }
     } catch (err) {
       console.error("Claim decision failed:", err);
       const message = err instanceof Error ? err.message : JSON.stringify(err);
       alert(`Claim decision failed: ${message}`);
     }
   };
-
-
-
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -300,7 +309,7 @@ const renderReportCard = (
     >
       <button
         onClick={toggle}
-        className={`w-full flex items-center gap-3 p-3 text-left ${colors}`}
+        className={`w-full flex items-center gap-3 p-3 text-left rounded-full ${colors}`}
       >
         {r.image_url && (
           <img
@@ -497,17 +506,17 @@ const renderReportCard = (
                     )}
                     <p className="mb-2"><strong>Remark:</strong> {c.remark}</p>
                     <div className="flex gap-2">
-                    <button
+                      <button
                         onClick={() => setConfirmClaim({ claim: c, decision: "accepted" })}
                         className="flex-1 px-4 py-2 bg-green-600 text-white rounded"
                       >
                         Claimed
                       </button>
                       <button
-                        onClick={() => handleClaimDecision(c, "rejected")}
+                        onClick={() => setConfirmReject(c)}
                         className="flex-1 px-4 py-2 bg-red-500 text-white rounded"
                       >
-                        Not mine 
+                        {c.report_type === "missing" ? "Not mine" : "Not the owner"}
                       </button>
                     </div>
                   </div>
@@ -549,17 +558,17 @@ const renderReportCard = (
         </div>
       )}
 
-      {confirmClaim && (
-      <div
-        className="fixed inset-0 flex items-center justify-center bg-black z-50 text-gray-700"
-        style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
-      >
+    {/* Accept Confirmation Modal */}
+    {confirmClaim && (
+      <div className="fixed inset-0 flex items-center justify-center bg-black z-50 text-gray-700"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
         <div className="bg-white rounded-lg p-6 w-80 shadow-lg text-center">
           <h3 className="text-lg font-bold mb-4">Confirm Action</h3>
+
           <p className="text-sm text-gray-600 mb-6">
-            {confirmClaim.decision === "accepted"
+            {confirmClaim.claim.report_type === "missing"
               ? "Are you sure this pet belongs to you? Once claimed, it will be moved to the rescued list."
-              : "Are you sure this pet is not yours? This action cannot be undone."}
+              : "Are you sure he/she is the owner? Once claimed, it will be moved to the rescued list."}
           </p>
           <div className="flex justify-between gap-4">
             <button
@@ -570,16 +579,44 @@ const renderReportCard = (
             </button>
             <button
               onClick={async () => {
-                await handleClaimDecision(confirmClaim.claim, confirmClaim.decision);
+                await handleClaimDecision(confirmClaim.claim, "accepted");
                 setConfirmClaim(null);
               }}
-              className={`flex-1 px-4 py-2 text-white rounded ${
-                confirmClaim.decision === "accepted"
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-red-500 hover:bg-red-600"
-              }`}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
             >
-              {confirmClaim.decision === "accepted" ? "Yes, Claim" : "Yes, Reject"}
+              Yes, Claim
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Reject Confirmation Modal */}
+    {confirmReject && (
+      <div className="fixed inset-0 flex items-center justify-center bg-black z-50 text-gray-700"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+        <div className="bg-white rounded-lg p-6 w-80 shadow-lg text-center">
+          <h3 className="text-lg font-bold mb-4">Confirm Rejection</h3>
+          <p className="text-sm text-gray-600 mb-6">
+            {confirmReject.report_type === "missing"
+              ? "Are you sure this pet is not yours? This claim will be permanently removed."
+              : "Are you sure he/she is not the owner? This claim will be permanently removed."}
+          </p>
+          <div className="flex justify-between gap-4">
+            <button
+              onClick={() => setConfirmReject(null)}
+              className="flex-1 px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                await handleClaimDecision(confirmReject, "rejected");
+                setConfirmReject(null);
+              }}
+              className="flex-1 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            >
+              Yes, Reject
             </button>
           </div>
         </div>

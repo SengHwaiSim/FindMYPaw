@@ -34,18 +34,20 @@ export default function Page() {
   };
 
   return (
-    <main className="relative min-h-screen flex items-center justify-center font-[Poppins] bg-gray-300 text-gray-700">
+    <main className="w-full h-screen flex items-center justify-center font-[Poppins] bg-gray-200 text-gray-700">
             {/* Background shapes */}
-      <div className="absolute w-[430px] h-[520px] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div className="absolute h-[200px] w-[200px] rounded-full bg-gradient-to-b from-[#1845ad] to-[#23a2f6] -left-20 -top-20"></div>
-        <div className="absolute h-[200px] w-[200px] rounded-full bg-gradient-to-r from-[#ff512f] to-[#f09819] -right-8 -bottom-20"></div>
+      <div className="absolute">
+        <div className="absolute h-[200px] w-[200px] rounded-full bg-gradient-to-b from-[#1845ad] to-[#23a2f6] -left-55 -top-75"></div>
+        <div className="absolute h-[200px] w-[200px] rounded-full bg-gradient-to-r from-[#ff512f] to-[#f09819] -right-55 -bottom"></div>
       </div>
 
       {/* Glass Form */}
       <form
         onSubmit={handleSubmit}
-        className="relative z-10 w-[350px] h-[500px] bg-white/10 backdrop-blur-lg border border-white/20 rounded-lg shadow-[0_0_40px_rgba(8,7,16,0.6)] p-8 flex flex-col"
+        className="relative m-4 z-10 w-full max-w-md h-auto bg-white/10 backdrop-blur-lg border border-white/20 
+                  rounded-lg shadow-[0_0_40px_rgba(8,7,16,0.6)] p-8 flex flex-col"
       >
+
         <h3 className="text-3xl font-medium text-black text-center mb-6">
           {isLogin ? "Login FindMYPaw" : "Register FindMYPaw"}
         </h3>
